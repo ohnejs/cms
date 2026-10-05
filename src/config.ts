@@ -58,6 +58,23 @@ declare module 'ohnejs' {
        * ```
        */
       previewURL?: string;
+
+      /**
+       * The slug of the page `/` shows, under a `[...slug]` route; its own path redirects to `/`.
+       *
+       * @default
+       * 'index'
+       */
+      homeSlug?: string;
+
+      /**
+       * The URLs told about every change to a page, the site settings, or a redirect, so a website can refresh.
+       * Each request is signed with the hook's `secret`; check it with `verifyWebhook` from `@ohnejs/client`.
+       *
+       * @default
+       * []
+       */
+      webhooks?: { url: string; secret: string }[];
     };
   }
 
@@ -100,6 +117,16 @@ export interface ResolvedCMSConfig {
    * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
    */
   previewURL: string;
+
+  /**
+   * The slug of the page `/` shows.
+   */
+  homeSlug: string;
+
+  /**
+   * The URLs told about every change, each with the secret that signs its requests.
+   */
+  webhooks: { url: string; secret: string }[];
 }
 
 /**
@@ -109,6 +136,8 @@ export const CMS_DEFAULTS = {
   routes: {},
   prefixDefaultLocale: false,
   previewURL: '{path}?ohne-preview={token}',
+  homeSlug: 'index',
+  webhooks: [],
 } satisfies Omit<ResolvedCMSConfig, 'site'>;
 
 /**
@@ -117,6 +146,7 @@ export const CMS_DEFAULTS = {
  */
 export const CMS_STRATEGIES: LayerStrategies = {
   routes: 'assign',
+  webhooks: 'replace',
 };
 
 useEnv().define('SITE_URL', { default: undefined });
@@ -134,7 +164,23 @@ export function useCMSConfig(): ResolvedCMSConfig {
  * A boot file runs it, so a bad route stops the server before any page is asked for.
  */
 export function validateCMSConfig(): void {
-  const { site, routes, previewURL } = useCMSConfig();
+  const { site, routes, previewURL, webhooks } = useCMSConfig();
+  for (const hook of webhooks) {
+    const url = URL.parse(hook.url);
+    const local = url?.hostname === 'localhost' || url?.hostname === '127.0.0.1';
+    if (url === null || !(url.protocol === 'https:' || (url.protocol === 'http:' && local))) {
+      throw ohneError({
+        title: `Invalid \`cms.webhooks\` URL \`${hook.url}\``,
+        body: ['A webhook URL is `https`, or `http` on `localhost`.'],
+      });
+    }
+    if (!isString(hook.secret) || hook.secret.length < 16) {
+      throw ohneError({
+        title: `Webhook \`${hook.url}\` needs a secret`,
+        body: ['Give it a `secret` of 16 characters or more, and check it on the website.'],
+      });
+    }
+  }
   if (!previewURL.startsWith('/') && !previewURL.startsWith('{path}')) {
     throw ohneError({
       title: `Invalid \`cms.previewURL\` value \`${previewURL}\``,

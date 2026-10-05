@@ -1,3 +1,5 @@
+import type {} from 'ohnejs/uploads';
+
 import '../fields/_augment.ts';
 import { field } from 'ohnejs';
 
@@ -15,7 +17,7 @@ export interface PageFieldsOptions {
 }
 
 /**
- * The fields a collection with pages carries: `slug`, `status`, `publishedAt`, and `expiresAt`.
+ * The fields a collection with pages carries: `slug`, `status`, `publishedAt`, `expiresAt`, and `seo`.
  * Spread them into `fields`, and read the collection through `publishedScope`.
  * A slug is unique per locale when translatable, and per collection otherwise.
  *
@@ -53,6 +55,24 @@ export function pageFields(options: PageFieldsOptions = {}) {
       nullable: true,
       label: 'cms.fields.expiresAt.label',
       description: 'cms.fields.expiresAt.description',
+    }),
+    seo: field('object', {
+      translatable,
+      label: 'cms.fields.seo.label',
+      fields: {
+        title: field('text', { nullable: true, label: 'cms.fields.seo.title.label' }),
+        description: field('text', {
+          nullable: true,
+          multiline: true,
+          label: 'cms.fields.seo.description.label',
+        }),
+        image: field('image', { label: 'cms.fields.seo.image.label' }),
+        noindex: field('boolean', {
+          default: false,
+          label: 'cms.fields.seo.noindex.label',
+          description: 'cms.fields.seo.noindex.description',
+        }),
+      },
     }),
   };
 }

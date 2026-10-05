@@ -67,11 +67,20 @@ export function splitLocale(path: string): { locale: string; path: string } | un
  */
 export function routePath(route: CMSRoute, slug: string | undefined): string {
   const { locales, defaultLocale } = useConfig().collections;
-  const inner =
-    route.match.params.length === 0
+  const home = isHome(route) && slug === useCMSConfig().homeSlug;
+  const inner = home
+    ? '/'
+    : route.match.params.length === 0
       ? route.match.pattern
       : fillRoute(route.match.pattern, { slug: slug ?? '' });
   const prefixed =
     locales.length > 1 && (route.locale !== defaultLocale || useCMSConfig().prefixDefaultLocale);
   return prefixed ? `/${route.locale}${inner === '/' ? '' : inner}` : inner;
+}
+
+/**
+ * Whether `route` is the catch-all at the site root, the one route the home and 404 pages live under.
+ */
+export function isHome(route: CMSRoute): boolean {
+  return route.match.pattern === '/[...slug]';
 }

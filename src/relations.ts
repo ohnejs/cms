@@ -11,6 +11,8 @@ import {
 import { queryScoped } from 'ohnejs/auth';
 import { isArray, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
+import { routePath, routesIn } from './routes.ts';
+
 /**
  * Where one relation value sits: the object holding it and its key.
  */
@@ -26,6 +28,7 @@ interface Slot {
  * A relation reads as its reader may read the target, so a draft or a hidden record stays out.
  * Public uploads load whatever the reader's role, since their files are public already; private ones never do.
  * Upload URLs become absolute, so a site on another origin can show them.
+ * A loaded record of a collection with pages carries its `path`, so a site links to it.
  * The loaded records keep their own relations as `UUID`s.
  */
 export async function loadRelations(
@@ -102,6 +105,14 @@ async function readTargets(
   if (ids.length === 0) return new Map();
   const records =
     target === 'Uploads' ? await readPublicUploads(ids) : await readScoped(target, ids, locale);
+  const route = routesIn(locale).find((entry) => entry.collection === target);
+  if (!isUndefined(route)) {
+    for (const record of records) {
+      if (route.match.params.length === 0 || isString(record.slug)) {
+        record.path = routePath(route, isString(record.slug) ? record.slug : undefined);
+      }
+    }
+  }
   return new Map(records.map((record) => [record.UUID as string, record]));
 }
 

@@ -18,11 +18,29 @@
     "expiresAt": {
       "label": "Expires at",
       "description": "Empty never expires."
+    },
+    "seo": {
+      "label": "SEO",
+      "title": {
+        "label": "Title"
+      },
+      "description": {
+        "label": "Description"
+      },
+      "image": {
+        "label": "Image"
+      },
+      "noindex": {
+        "label": "Hide from search engines",
+        "description": "Search engines skip this page, and the sitemap leaves it out."
+      }
     }
   },
   "validation": {
     "slug": "Use lowercase letters, digits, and hyphens",
-    "slugNested": "A slug of this collection holds no slashes"
+    "slugNested": "A slug of this collection holds no slashes",
+    "path": "Start the path with a slash",
+    "target": "Use a path starting with a slash, or a full URL"
   },
   "liveView": {
     "addSlug": "Add a slug to see the page here",
@@ -44,5 +62,45 @@
     "invalidToken": "This preview token is not yours, or it has expired",
     "notWritable": "You may not change this record",
     "signIn": "Sign in to preview your website"
+  },
+  "site": {
+    "name": {
+      "label": "Site name"
+    },
+    "titleTemplate": {
+      "label": "Title template",
+      "description": "How page titles read: `'{title}'` is the page title, `'{site}'` the site name."
+    },
+    "description": {
+      "label": "Default description"
+    },
+    "image": {
+      "label": "Default share image"
+    },
+    "noindex": {
+      "label": "Hide the site from search engines",
+      "description": "Every page asks search engines to stay away, and robots.txt closes the site."
+    }
+  },
+  "redirects": {
+    "from": {
+      "label": "From",
+      "description": "The path a visitor asks for, like /old-page."
+    },
+    "to": {
+      "label": "To",
+      "description": "A path on the website, like /new-page, or a full URL."
+    },
+    "code": {
+      "label": "Status",
+      "301": "301 Moved permanently",
+      "302": "302 Found",
+      "307": "307 Temporary redirect",
+      "308": "308 Permanent redirect"
+    },
+    "forwardQuery": {
+      "label": "Keep the query",
+      "description": "Carries ?query parameters over to the target."
+    }
   }
 }
