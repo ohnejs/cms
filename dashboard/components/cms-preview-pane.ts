@@ -1,4 +1,4 @@
-import type { Child } from 'ohnejs/dashboard';
+import type { BlockAction, Child } from 'ohnejs/dashboard';
 
 import { api, attachTooltip, button, css, h, icon, useT, when } from 'ohnejs/dashboard';
 import { effect, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
@@ -45,9 +45,9 @@ export interface PreviewPaneOptions {
   highlighted: () => string | undefined;
 
   /**
-   * Each block's label by its `UUID`, for the chip the site draws.
+   * What the site's toolbar needs to know of each block, by the id it marks the block with.
    */
-  labels: () => Record<string, string>;
+  blocks: () => Record<string, PreviewBlock>;
 
   /**
    * Changes on every save, so a site without the client reloads to show the saved record.
@@ -63,7 +63,50 @@ export interface PreviewPaneOptions {
    * Called when undo, redo, or save is pressed inside the site.
    */
   onKey: (action: 'undo' | 'redo' | 'save') => void;
+
+  /**
+   * Called when a block's toolbar button or key is used inside the site.
+   */
+  onAction: (action: BlockAction, uuid: string) => void;
 }
+
+/**
+ * What the site's toolbar knows of one block.
+ */
+export interface PreviewBlock {
+  /**
+   * The block's label, shown in its chip.
+   */
+  label: string;
+
+  /**
+   * Whether it is first in its list, so it cannot move up.
+   */
+  first: boolean;
+
+  /**
+   * Whether it is last in its list, so it cannot move down.
+   */
+  last: boolean;
+
+  /**
+   * Whether a block can be added inside it: it holds exactly one blocks list.
+   */
+  inside: boolean;
+}
+
+const ACTIONS = new Set<string>([
+  'moveUp',
+  'moveDown',
+  'addBefore',
+  'addInside',
+  'addAfter',
+  'duplicate',
+  'delete',
+  'copy',
+  'cut',
+  'paste',
+]);
 
 /**
  * The preview pane: the frame and the parts of the footer that act on it.
@@ -246,14 +289,15 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       type?: unknown;
       block?: unknown;
       action?: unknown;
+      op?: unknown;
     };
     if (event.source !== iframe.contentWindow || event.origin !== untracked(origin)) return;
     if (data?.ohne !== PROTOCOL) return;
     if (data.type === 'hello') {
       connected.value = true;
       silent.value = false;
-      post('setup', { v: PROTOCOL, editable: untracked(options.editable) });
-      post('state', { labels: untracked(options.labels) });
+      post('setup', { v: PROTOCOL, editable: untracked(options.editable), texts: texts() });
+      post('state', { blocks: untracked(options.blocks) });
       post('focus', { block: untracked(options.focused) ?? null });
     } else if (data.type === 'select' && typeof data.block === 'string') {
       options.onSelect(data.block);
@@ -262,6 +306,12 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       (data.action === 'undo' || data.action === 'redo' || data.action === 'save')
     ) {
       options.onKey(data.action);
+    } else if (
+      data.type === 'action' &&
+      ACTIONS.has(String(data.op)) &&
+      typeof data.block === 'string'
+    ) {
+      options.onAction(data.op as BlockAction, data.block);
     }
   };
   window.addEventListener('message', onMessage);
@@ -288,9 +338,24 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
     if (connected.value) untracked(() => post('highlight', { block: block ?? null }));
   });
   effect(() => {
-    const labels = options.labels();
-    if (connected.value) untracked(() => post('state', { labels }));
+    const blocks = options.blocks();
+    if (connected.value) untracked(() => post('state', { blocks }));
   });
+
+  /**
+   * The toolbar's button titles, in the dashboard's language.
+   */
+  function texts(): Record<string, string> {
+    return {
+      moveUp: t('dashboard.sort.moveUp'),
+      moveDown: t('dashboard.sort.moveDown'),
+      addBefore: t('dashboard.sort.addBefore'),
+      addInside: t('dashboard.sort.addInside'),
+      addAfter: t('dashboard.sort.addAfter'),
+      duplicate: t('dashboard.duplicate'),
+      delete: t('dashboard.delete'),
+    };
+  }
 
   iframe.addEventListener('mouseleave', () => post('highlight', { block: null }));
 

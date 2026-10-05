@@ -25,6 +25,7 @@ import {
   dashboardMeta,
   h,
   icon,
+  iconGroup,
   resizer,
   tab,
   tabs,
@@ -35,7 +36,7 @@ import {
 import { effect, isUndefined, onCleanup, readStored, ref, writeStored } from 'ohnejs/utils';
 
 import { pagePath } from './cms-meta.ts';
-import { previewPane } from './cms-preview-pane.ts';
+import { type PreviewBlock, previewPane } from './cms-preview-pane.ts';
 
 const STORAGE_KEY = 'ohne-cms-live-view';
 const LEFT_WIDTH = 272;
@@ -263,6 +264,50 @@ css`
     padding: 0;
     min-inline-size: auto;
   }
+
+  .o-cms-lv-panels {
+    flex-shrink: 0;
+    margin: -0.125rem 0 -0.125rem auto;
+  }
+
+  @media (min-width: 1025px) {
+    .o-cms-lv-panels {
+      display: none;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .o-cms-lv-header .ohne-button {
+      --ohne-size: -2;
+    }
+
+    .o-cms-lv-header .ohne-row > .ohne-button:first-child {
+      display: none;
+    }
+
+    .o-cms-lv-panel-left,
+    .o-cms-lv-panel-middle,
+    .o-cms-lv-panel-right {
+      flex: 1;
+      display: none;
+      /* Beats the remembered desktop width, which is set inline. */
+      width: 100% !important;
+      min-width: 100%;
+      min-height: 0;
+      border-width: 0;
+    }
+
+    .o-cms-lv-1 .o-cms-lv-panel-left,
+    .o-cms-lv-2 .o-cms-lv-panel-middle,
+    .o-cms-lv-3 .o-cms-lv-panel-right {
+      display: flex;
+    }
+
+    .o-cms-lv-panel-left > .ohne-resizer,
+    .o-cms-lv-panel-right > .ohne-resizer {
+      display: none;
+    }
+  }
 `;
 
 /**
@@ -319,10 +364,24 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   const right = ref(stored.right);
   const remember = (): void => writeStored(STORAGE_KEY, { left: left.value, right: right.value });
 
+  const panel = ref<number>(blocksFields.length === 0 ? 2 : 1);
+  const panels = iconGroup(panel, {
+    size: -1,
+    showTooltips: true,
+    choices: () => [
+      ...(blocksFields.length === 0
+        ? []
+        : [{ value: 1, icon: 'cube' as const, title: t('cms.liveView.blocks') }]),
+      { value: 2, icon: 'device-desktop' as const, title: t('cms.liveView.preview') },
+      { value: 3, icon: 'forms' as const, title: t('cms.liveView.fields') },
+    ],
+  });
+  panels.classList.add('o-cms-lv-panels');
+
   const header = h(
     'div',
     { class: 'o-cms-lv-header' },
-    h('div', { class: 'ohne-row' }, menuButton(), ...recordEditorHeading(editor)),
+    h('div', { class: 'ohne-row' }, menuButton(), ...recordEditorHeading(editor), panels),
   );
 
   const pane = previewPane({
@@ -354,16 +413,32 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
     editable: editor.canWrite,
     focused: () => idOf(selected()),
     highlighted: () => idOf(tree()?.highlighted()),
-    labels: () => Object.fromEntries(allNodes().map((node) => [blockID(node), blockLabel(node)])),
+    blocks: () => {
+      const blocks: Record<string, PreviewBlock> = {};
+      const walk = (list: BlocksHandle | undefined): void => {
+        const nodes = list?.nodes() ?? [];
+        nodes.forEach((node, index) => {
+          const children = childLists(node);
+          blocks[blockID(node)] = {
+            label: blockLabel(node),
+            first: index === 0,
+            last: index === nodes.length - 1,
+            inside: children.length === 1 && (children[0]?.offered.length ?? 0) > 0,
+          };
+          children.forEach(walk);
+        });
+      };
+      for (const field of blocksFields) walk(blocksHandleOf(form.value?.controlOf(field.name)));
+      return blocks;
+    },
     saves: editor.saved,
     onSelect: (uuid) => {
-      for (const field of blocksFields) {
-        const node = nodesOf(field.name).find((entry) => blockID(entry) === uuid);
-        if (isUndefined(node)) continue;
-        active.value = field.name;
-        trees.get(field.name)?.select([node.$key]);
-        return;
-      }
+      const found = find(uuid);
+      found?.tree.select([found.node.$key]);
+    },
+    onAction: (action, uuid) => {
+      const found = find(uuid);
+      found?.tree.run(action, [found.node.$key]);
     },
     onKey: (action) => {
       if (action === 'save') {
@@ -464,7 +539,11 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
 
   return h(
     'div',
-    { class: blocksFields.length === 0 ? 'o-cms-lv' : 'o-cms-lv o-cms-lv-has-tree' },
+    {
+      class: () =>
+        `o-cms-lv o-cms-lv-${panel.value}` +
+        (blocksFields.length === 0 ? '' : ' o-cms-lv-has-tree'),
+    },
     header,
     h('div', { class: 'o-cms-lv-wrapper' }, leftEl, middleEl, rightEl),
   );
@@ -620,10 +699,17 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   }
 
   /**
-   * Every block of the record, at every depth.
+   * The block the website marks with `uuid` and the tree showing it, made the active tab.
    */
-  function allNodes(): BlockNode[] {
-    return blocksFields.flatMap((field) => nodesOf(field.name));
+  function find(uuid: string): { node: BlockNode; tree: BlocksTree } | undefined {
+    for (const field of blocksFields) {
+      const node = nodesOf(field.name).find((entry) => blockID(entry) === uuid);
+      const shown = trees.get(field.name);
+      if (isUndefined(node) || isUndefined(shown)) continue;
+      active.value = field.name;
+      return { node, tree: shown };
+    }
+    return undefined;
   }
 
   /**

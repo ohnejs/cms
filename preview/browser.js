@@ -3,6 +3,20 @@ const DASHBOARD = '__OHNE_DASHBOARD_ORIGIN__';
 const PROTOCOL = 1;
 const SCROLL_INSET = 32;
 const FOCUS_WAIT = 500;
+const TOOLBAR_MIN = { width: 196, height: 24 };
+
+// Tabler icons, MIT: the toolbar draws them itself, since a site loads no icon set of ours.
+const ICONS = {
+  moveDown: '<path d="m6 9l6 6l6-6"/>',
+  moveUp: '<path d="m6 15l6-6l6 6"/>',
+  addAfter: '<path d="M4 20h16m-8-6V4m0 10l4-4m-4 4l-4-4"/>',
+  addInside: '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0m6 0h6m-3-3v6"/>',
+  addBefore: '<path d="M12 10v10m0-10l4 4m-4-4l-4 4M4 4h16"/>',
+  duplicate:
+    '<path d="M7 9.667A2.667 2.667 0 0 1 9.667 7h8.666A2.667 2.667 0 0 1 21 9.667v8.666A2.667 2.667 0 0 1 18.333 21H9.667A2.667 2.667 0 0 1 7 18.333z"/><path d="M4.012 16.737A2 2 0 0 1 3 15V5c0-1.1.9-2 2-2h10c.75 0 1.158.385 1.5 1"/>',
+  delete:
+    '<path d="M4 7h16m-10 4v6m4-6v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>',
+};
 
 const STYLE = `
   .rect {
@@ -18,6 +32,74 @@ const STYLE = `
 
   .rect.solid {
     outline-style: solid;
+  }
+
+  .bar {
+    display: flex;
+    gap: 1px;
+    max-width: 100%;
+    pointer-events: auto;
+  }
+
+  .bar.above {
+    max-width: calc(100% + 4px);
+    transform: translate3d(2px, calc(-100% - 3px), 0);
+  }
+
+  .bar.faded {
+    opacity: 0.64;
+  }
+
+  .bar > *:first-child {
+    border-bottom-left-radius: 0.25rem;
+  }
+
+  .bar.above > *:first-child {
+    border-top-left-radius: 0.25rem;
+    border-bottom-left-radius: 0;
+  }
+
+  .bar.above > *:last-child {
+    border-top-right-radius: 0.25rem;
+  }
+
+  .bar button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.125rem;
+    height: 1.125rem;
+    padding: 0;
+    border: none;
+    outline: none;
+    background-color: var(--ohne-preview, #4c7be5);
+    color: var(--ohne-preview-foreground, #ffffff);
+    cursor: pointer;
+  }
+
+  .bar button:hover,
+  .bar button:focus {
+    background-color: var(--ohne-preview-hover, #3a6bbf);
+  }
+
+  .bar button[data-destructive]:hover,
+  .bar button[data-destructive]:focus {
+    background-color: var(--ohne-preview-destructive, #ef5945);
+  }
+
+  .bar button:disabled {
+    pointer-events: none;
+    background-color: var(--ohne-preview-disabled, #8dabef);
+  }
+
+  .bar svg {
+    width: 0.875rem;
+    height: 0.875rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
   .label {
@@ -68,7 +150,8 @@ function start(options) {
   const token = takeToken();
   const state = {
     editable: false,
-    labels: {},
+    texts: {},
+    blocks: {},
     hovered: undefined,
     highlighted: undefined,
     focused: undefined,
@@ -120,14 +203,40 @@ function start(options) {
       el === elementOf(state.focused) ||
       el === elementOf(state.highlighted) ||
       el === elementOf(state.hovered);
-    const label = state.labels[uuid];
-    if (deepest && label) {
-      const chip = document.createElement('span');
-      chip.className = 'label' + (box.top > 24 ? ' above' : '') + (solid ? '' : ' faded');
-      chip.textContent = label;
-      rect.append(chip);
+    const block = state.blocks[uuid];
+    if (!deepest || !block) return rect;
+    const bar = document.createElement('div');
+    bar.className = 'bar' + (box.top > 24 ? ' above' : '') + (solid ? '' : ' faded');
+    const roomy = box.width >= TOOLBAR_MIN.width && box.height >= TOOLBAR_MIN.height;
+    if (state.editable && roomy) {
+      for (const op of Object.keys(ICONS)) {
+        if (op === 'addInside' && !block.inside) continue;
+        bar.append(
+          buttonOf(op, uuid, (op === 'moveUp' && block.first) || (op === 'moveDown' && block.last)),
+        );
+      }
     }
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = block.label;
+    bar.append(label);
+    rect.append(bar);
     return rect;
+  }
+
+  function buttonOf(op, uuid, disabled) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = state.texts[op] ?? op;
+    button.disabled = disabled;
+    if (op === 'delete') button.dataset.destructive = '';
+    button.innerHTML = `<svg viewBox="0 0 24 24">${ICONS[op]}</svg>`;
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      post('action', { op, block: uuid });
+    });
+    return button;
   }
 
   function focus(uuid) {
@@ -149,9 +258,10 @@ function start(options) {
     if (!data || data.ohne !== PROTOCOL) return;
     if (data.type === 'setup') {
       state.editable = data.editable === true;
+      state.texts = data.texts ?? {};
       redraw();
     } else if (data.type === 'state') {
-      state.labels = data.labels ?? {};
+      state.blocks = data.blocks ?? {};
       redraw();
     } else if (data.type === 'highlight') {
       state.highlighted = data.block ?? undefined;
@@ -169,6 +279,7 @@ function start(options) {
     document,
     'pointermove',
     (event) => {
+      if (event.target === host) return;
       const uuid = blockOf(event.target);
       if (uuid === state.hovered) return;
       state.hovered = uuid;
@@ -202,6 +313,22 @@ function start(options) {
     'keydown',
     (event) => {
       const mod = event.metaKey || event.ctrlKey;
+      const op = state.editable && state.focused && !typing() ? blockKey(event, mod) : undefined;
+      if (op === 'parent') {
+        event.preventDefault();
+        const parent = elementOf(state.focused)?.parentElement?.closest('[data-ohne-block]');
+        const uuid = parent?.getAttribute('data-ohne-block');
+        if (uuid) {
+          focus(uuid);
+          post('select', { block: uuid });
+        }
+        return;
+      }
+      if (op) {
+        event.preventDefault();
+        post('action', { op, block: state.focused });
+        return;
+      }
       if (!mod) return;
       const key = event.key.toLowerCase();
       const action =
@@ -242,6 +369,36 @@ function start(options) {
       session = undefined;
     },
   };
+}
+
+/**
+ * The block action a key press asks for while a block is selected, or `undefined`.
+ */
+function blockKey(event, mod) {
+  const key = event.key;
+  if (!mod && (key === 'Delete' || key === 'Backspace')) return 'delete';
+  if (!mod && key === 'Enter') return event.shiftKey ? 'addBefore' : 'addAfter';
+  if (!mod && key === 'Escape') return 'parent';
+  if (!mod) return undefined;
+  if (key === 'ArrowUp') return 'moveUp';
+  if (key === 'ArrowDown') return 'moveDown';
+  const letter = key.toLowerCase();
+  if (letter === 'd') return 'duplicate';
+  if (letter === 'c' && !getSelection()?.toString()) return 'copy';
+  if (letter === 'x' && !getSelection()?.toString()) return 'cut';
+  if (letter === 'v') return 'paste';
+  return undefined;
+}
+
+/**
+ * Whether the visitor is typing into the page, where keys belong to the text.
+ */
+function typing() {
+  const el = document.activeElement;
+  return (
+    el instanceof HTMLElement &&
+    (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+  );
 }
 
 /**

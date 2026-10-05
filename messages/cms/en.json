@@ -26,8 +26,11 @@
   },
   "liveView": {
     "addSlug": "Add a slug to see the page here",
+    "blocks": "Blocks",
     "dimensions": "Dimensions",
+    "fields": "Fields",
     "noPreview": "The website shows here once a site is set",
+    "preview": "Preview",
     "reload": "Reload",
     "silent": {
       "client": "Load the ohne client on this page.",
