@@ -62,8 +62,10 @@ if (new URL(import.meta.url).searchParams.has('auto')) connect();
 
 /**
  * Says hello to the dashboard and keeps the page in step with it until disposed.
+ * The preview token leaves the address bar at once; the page refetches with it from memory.
  */
 function start(options) {
+  const token = takeToken();
   const state = {
     editable: false,
     labels: {},
@@ -156,9 +158,10 @@ function start(options) {
       redraw();
     } else if (data.type === 'focus') {
       focus(data.block);
-    } else if (data.type === 'refresh') {
-      if (options.onRefresh) options.onRefresh();
-      else location.reload();
+    } else if (data.type === 'data') {
+      if (options.onData) options.onData(data.page);
+      else if (options.onRefresh) options.onRefresh();
+      else void refetch(token);
     }
   });
 
@@ -239,6 +242,31 @@ function start(options) {
       session = undefined;
     },
   };
+}
+
+/**
+ * The preview token from the address bar, removed from it so it never lands in a bookmark or a log.
+ */
+function takeToken() {
+  const url = new URL(location.href);
+  const token = url.searchParams.get('ohne-preview');
+  if (token === null) return undefined;
+  url.searchParams.delete('ohne-preview');
+  history.replaceState(history.state, '', url);
+  return token;
+}
+
+/**
+ * Renders the page again from the server with the token and swaps its body in, keeping the scroll.
+ */
+async function refetch(token) {
+  const url = new URL(location.href);
+  if (token) url.searchParams.set('ohne-preview', token);
+  const html = await (await fetch(url)).text();
+  const next = new DOMParser().parseFromString(html, 'text/html').body;
+  const { scrollX, scrollY } = window;
+  document.body.replaceWith(next);
+  window.scrollTo(scrollX, scrollY);
 }
 
 /**

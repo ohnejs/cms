@@ -44,6 +44,20 @@ declare module 'ohnejs' {
        * false
        */
       prefixDefaultLocale?: boolean;
+
+      /**
+       * What the live editor frames, relative to `site`: `{path}` is the page's path, `{token}` the preview token.
+       * A site whose framework needs a preview route of its own, like Next's draft mode, points it there.
+       *
+       * @default
+       * '{path}?ohne-preview={token}'
+       *
+       * @example
+       * ```ts
+       * '/api/preview?token={token}&path={path}'
+       * ```
+       */
+      previewURL?: string;
     };
   }
 
@@ -81,6 +95,11 @@ export interface ResolvedCMSConfig {
    * Whether a path in the default locale starts with the locale too.
    */
   prefixDefaultLocale: boolean;
+
+  /**
+   * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
+   */
+  previewURL: string;
 }
 
 /**
@@ -89,6 +108,7 @@ export interface ResolvedCMSConfig {
 export const CMS_DEFAULTS = {
   routes: {},
   prefixDefaultLocale: false,
+  previewURL: '{path}?ohne-preview={token}',
 } satisfies Omit<ResolvedCMSConfig, 'site'>;
 
 /**
@@ -114,7 +134,13 @@ export function useCMSConfig(): ResolvedCMSConfig {
  * A boot file runs it, so a bad route stops the server before any page is asked for.
  */
 export function validateCMSConfig(): void {
-  const { site, routes } = useCMSConfig();
+  const { site, routes, previewURL } = useCMSConfig();
+  if (!previewURL.startsWith('/') && !previewURL.startsWith('{path}')) {
+    throw ohneError({
+      title: `Invalid \`cms.previewURL\` value \`${previewURL}\``,
+      body: ['It is a path on the website, starting with `/` or `{path}`, holding `{token}`.'],
+    });
+  }
   if (!isUndefined(site) && !URL.canParse(site)) {
     throw ohneError({
       title: `Invalid \`cms.site\` value \`${site}\``,

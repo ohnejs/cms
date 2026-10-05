@@ -1,19 +1,28 @@
 import type { Child } from 'ohnejs/dashboard';
 
-import { attachTooltip, button, css, h, icon, useT, when } from 'ohnejs/dashboard';
+import { api, attachTooltip, button, css, h, icon, useT, when } from 'ohnejs/dashboard';
 import { effect, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
+
+import { frameURL } from './cms-meta.ts';
 
 const PROTOCOL = 1;
 const HELLO_WAIT = 5000;
+const PUSH_DELAY = 50;
+const LOAD_DELAY = 300;
 
 /**
  * What the preview pane shows and reports.
  */
 export interface PreviewPaneOptions {
   /**
-   * The page to frame, absolute; `undefined` shows `missing` instead.
+   * The site path of the page to frame; `undefined` shows `missing` instead.
    */
-  url: () => string | undefined;
+  path: () => string | undefined;
+
+  /**
+   * The unsaved state to show, as a draft body; `undefined` while it cannot be read, as with a malformed number.
+   */
+  draft: () => Record<string, unknown> | undefined;
 
   /**
    * Why there is no page to frame, shown in its place.
@@ -41,7 +50,7 @@ export interface PreviewPaneOptions {
   labels: () => Record<string, string>;
 
   /**
-   * Changes on every save, so the frame reloads to show the saved record.
+   * Changes on every save, so a site without the client reloads to show the saved record.
    */
   saves: () => unknown;
 
@@ -136,10 +145,12 @@ css`
 `;
 
 /**
- * Frames the website at a record's page and keeps it in step with the editor.
+ * Frames the website at a record's page and keeps it in step with the editor, keystroke by keystroke.
+ * It mints a preview token, frames the page through `cms.previewURL`, and stores each draft under the token.
+ * The page the draft yields is posted into the frame, which applies it or fetches it again.
  * Only messages from that frame, at that page's origin, are trusted; none is ever posted to `'*'`.
  * A site that never says hello within five seconds gets a note naming the usual causes.
- * Every save reloads the frame, so even a site without the client shows the saved record.
+ * It then reloads on every save, so even a site without the client shows the saved record.
  */
 export function previewPane(options: PreviewPaneOptions): PreviewPane {
   const t = useT();
@@ -147,11 +158,21 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
   const connected = ref(false);
   const silent = ref(false);
   const size = ref({ width: 0, height: 0 });
+  const token = ref<string | undefined>(undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  void api('POST /cms/preview/tokens').then(async (response) => {
+    if (response.ok) token.value = ((await response.json()) as { token: string }).token;
+  });
+
+  const url = (): string | undefined => {
+    const path = options.path();
+    return isUndefined(path) || isUndefined(token.value) ? undefined : frameURL(path, token.value);
+  };
+
   const origin = (): string | undefined => {
-    const url = options.url();
-    return isUndefined(url) ? undefined : new URL(url).origin;
+    const target = url();
+    return isUndefined(target) ? undefined : new URL(target).origin;
   };
 
   const post = (type: string, payload: Record<string, unknown> = {}): void => {
@@ -161,18 +182,55 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
   };
 
   const load = (): void => {
-    const url = untracked(options.url);
-    if (isUndefined(url)) return;
+    const target = untracked(url);
+    if (isUndefined(target)) return;
     connected.value = false;
     silent.value = false;
-    iframe.src = url;
+    iframe.src = target;
   };
 
-  // A save that also moves the page, as a changed slug does, still loads it once.
+  let loadTimer: ReturnType<typeof setTimeout> | undefined;
+  // A page the draft names, like a new one by its slug, exists only once that draft is stored.
   effect(() => {
-    void options.url();
+    void url();
+    clearTimeout(loadTimer);
+    loadTimer = setTimeout(() => void flush().then(load), LOAD_DELAY);
+  });
+
+  let first = true;
+  effect(() => {
     void options.saves();
-    untracked(load);
+    if (first) first = false;
+    else if (!untracked(() => connected.value)) untracked(load);
+  });
+
+  let pending: Record<string, unknown> | undefined;
+  let pushing: Promise<void> = Promise.resolve();
+  let pushTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // One request at a time, the newest draft winning, so a slow answer never lands after a newer one.
+  const flush = (): Promise<void> => {
+    clearTimeout(pushTimer);
+    pushing = pushing.then(async () => {
+      const draft = pending;
+      pending = undefined;
+      if (isUndefined(draft) || isUndefined(token.value)) return;
+      const response = await api(`PUT /cms/preview/tokens/${token.value}`, {
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...draft, path: untracked(options.path) }),
+      }).catch(() => undefined);
+      const page: unknown = response?.ok ? await response.json().catch(() => undefined) : undefined;
+      if (!isUndefined(page) && isUndefined(pending)) post('data', { page });
+    });
+    return pushing;
+  };
+
+  effect(() => {
+    const draft = options.draft();
+    if (isUndefined(token.value) || isUndefined(draft)) return;
+    pending = draft;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => void flush(), PUSH_DELAY);
   });
 
   iframe.addEventListener('load', () => {
@@ -215,6 +273,8 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
 
   onCleanup(() => {
     clearTimeout(timer);
+    clearTimeout(loadTimer);
+    clearTimeout(pushTimer);
     window.removeEventListener('message', onMessage);
     resize.disconnect();
   });
@@ -249,7 +309,7 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       'div',
       { class: 'o-cms-pv' },
       when(
-        () => !isUndefined(options.url()),
+        () => !isUndefined(url()),
         () => iframe,
         () => h('div', { class: 'o-cms-pv-missing' }, () => options.missing()),
       ),
@@ -271,7 +331,7 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       ),
     ),
     controls: when(
-      () => !isUndefined(options.url()),
+      () => !isUndefined(url()),
       () => [dimensions, reload],
     ),
   };

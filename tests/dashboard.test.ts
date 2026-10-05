@@ -51,6 +51,7 @@ export default defineCollection({ fields: { title: field('text'), ...pageFields(
     deepStrictEqual(meta.cms, {
       routes: { Pages: { en: '/[...slug]', de: '/[...slug]' }, Posts: { de: '/artikel/[slug]' } },
       prefixDefaultLocale: false,
+      previewURL: '{path}?ohne-preview={token}',
     });
   });
 });

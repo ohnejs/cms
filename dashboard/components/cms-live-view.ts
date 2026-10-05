@@ -34,7 +34,7 @@ import {
 } from 'ohnejs/dashboard';
 import { effect, isUndefined, onCleanup, readStored, ref, writeStored } from 'ohnejs/utils';
 
-import { pageURL } from './cms-meta.ts';
+import { pagePath } from './cms-meta.ts';
 import { previewPane } from './cms-preview-pane.ts';
 
 const STORAGE_KEY = 'ohne-cms-live-view';
@@ -279,6 +279,7 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   const { form, state, busy } = editor;
 
   const blocksFields = collection.fields.filter((field) => field.type === 'blocks');
+  const draftKey = crypto.randomUUID();
   const active = ref(blocksFields[0]?.name ?? '');
   const trees = new Map<string, BlocksTree>(
     blocksFields.map((field) => [
@@ -325,26 +326,39 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   );
 
   const pane = previewPane({
-    url: () => pageURL(collection, effectiveContentLocale(), editor.saved()),
+    path: () =>
+      pagePath(
+        collection,
+        effectiveContentLocale(),
+        editor.create ? { slug: form.value?.controlOf('slug')?.read().value } : editor.saved(),
+      ),
+    draft: () => {
+      void editor.revision.value;
+      const reading = form.value?.read();
+      if (isUndefined(reading) || !isUndefined(reading.errors)) return undefined;
+      const values = (reading.value ?? {}) as Record<string, unknown>;
+      for (const field of blocksFields) {
+        stampBlocks(values[field.name], blocksHandleOf(form.value?.controlOf(field.name)));
+      }
+      return {
+        collection: collection.name,
+        record: editor.id() === '' ? draftKey : editor.id(),
+        locale: effectiveContentLocale(),
+        values,
+      };
+    },
     missing: () =>
       t(
-        isUndefined(dashboardMeta()?.cms?.site)
-          ? 'cms.liveView.noPreview'
-          : 'cms.liveView.saveFirst',
+        isUndefined(dashboardMeta()?.cms?.site) ? 'cms.liveView.noPreview' : 'cms.liveView.addSlug',
       ),
     editable: editor.canWrite,
-    focused: () => selected()?.uuid,
-    highlighted: () => tree()?.highlighted()?.uuid,
-    labels: () =>
-      Object.fromEntries(
-        allNodes().flatMap((node) =>
-          isUndefined(node.uuid) ? [] : [[node.uuid, blockLabel(node)]],
-        ),
-      ),
+    focused: () => idOf(selected()),
+    highlighted: () => idOf(tree()?.highlighted()),
+    labels: () => Object.fromEntries(allNodes().map((node) => [blockID(node), blockLabel(node)])),
     saves: editor.saved,
     onSelect: (uuid) => {
       for (const field of blocksFields) {
-        const node = nodesOf(field.name).find((entry) => entry.uuid === uuid);
+        const node = nodesOf(field.name).find((entry) => blockID(entry) === uuid);
         if (isUndefined(node)) continue;
         active.value = field.name;
         trees.get(field.name)?.select([node.$key]);
@@ -631,14 +645,59 @@ function deepestErrored(node: BlockNode): BlockNode {
   return node;
 }
 
+const draftIDs = new WeakMap<object, string>();
+
+/**
+ * The id the website marks a block with: its `UUID`, or a draft id that holds until its first save.
+ */
+function blockID(node: BlockNode): string {
+  if (!isUndefined(node.uuid)) return node.uuid;
+  let id = draftIDs.get(node.form);
+  if (isUndefined(id)) {
+    id = crypto.randomUUID();
+    draftIDs.set(node.form, id);
+  }
+  return id;
+}
+
+/**
+ * The website id of `node`, or `undefined` without one.
+ */
+function idOf(node: BlockNode | undefined): string | undefined {
+  return isUndefined(node) ? undefined : blockID(node);
+}
+
+/**
+ * Gives every block item of a draft value the id the website marks it with, at every depth.
+ * The items follow the list's nodes one to one, since a draft is read only while no control errs.
+ */
+function stampBlocks(value: unknown, list: BlocksHandle | undefined): void {
+  if (!Array.isArray(value) || isUndefined(list)) return;
+  const nodes = list.nodes();
+  value.forEach((item: Record<string, unknown>, index) => {
+    const node = nodes[index];
+    if (isUndefined(node)) return;
+    item.UUID = blockID(node);
+    const fields = (item.fields ?? {}) as Record<string, unknown>;
+    for (const child of childFields(node)) {
+      stampBlocks(fields[child], blocksHandleOf(node.form.controlOf(child)));
+    }
+  });
+}
+
+/**
+ * The names of the `blocks` fields a block holds.
+ */
+function childFields(node: BlockNode): string[] {
+  const block = dashboardMeta()?.blocks.find((entry) => entry.name === node.block);
+  return (block?.fields ?? [])
+    .filter((field) => field.type === 'blocks')
+    .map((field) => field.name);
+}
+
 /**
  * The lists of the `blocks` fields a block holds.
  */
 function childLists(node: BlockNode): BlocksHandle[] {
-  const block = dashboardMeta()?.blocks.find((entry) => entry.name === node.block);
-  return (block?.fields ?? []).flatMap((field) => {
-    const list =
-      field.type === 'blocks' ? blocksHandleOf(node.form.controlOf(field.name)) : undefined;
-    return isUndefined(list) ? [] : [list];
-  });
+  return childFields(node).flatMap((name) => blocksHandleOf(node.form.controlOf(name)) ?? []);
 }

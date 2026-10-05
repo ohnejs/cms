@@ -23,6 +23,11 @@ declare module 'ohnejs/dashboard' {
        * Whether a path in the default locale starts with the locale too.
        */
       prefixDefaultLocale: boolean;
+
+      /**
+       * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
+       */
+      previewURL: string;
     };
   }
 }
@@ -35,17 +40,17 @@ export function hasPages(collection: DashboardCollection): boolean {
 }
 
 /**
- * The absolute URL of a record's page in `locale`, or `undefined` when it has no page there yet.
- * A route with a `[slug]` needs the saved slug; a singleton's static route needs nothing.
+ * The site path of a record's page in `locale`, or `undefined` when it has no page there yet.
+ * A route with a `[slug]` needs a slug; a singleton's static route needs nothing.
  */
-export function pageURL(
+export function pagePath(
   collection: DashboardCollection,
   locale: string,
   record: Readonly<Record<string, unknown>>,
 ): string | undefined {
   const meta = dashboardMeta();
   const cms = meta?.cms;
-  if (isUndefined(meta) || isUndefined(cms?.site)) return undefined;
+  if (isUndefined(meta) || isUndefined(cms)) return undefined;
   const routes = cms.routes[collection.name] ?? {};
   const pattern = routes[locale] ?? routes[meta.defaultLocale];
   if (isUndefined(pattern)) return undefined;
@@ -54,6 +59,15 @@ export function pageURL(
   const inner = pattern.includes('[') ? fillRoute(pattern, { slug: slug as string }) : pattern;
   const prefixed =
     meta.locales.length > 1 && (locale !== meta.defaultLocale || cms.prefixDefaultLocale);
-  const path = prefixed ? `/${locale}${inner === '/' ? '' : inner}` : inner;
-  return cms.site.replace(/\/+$/, '') + path;
+  return prefixed ? `/${locale}${inner === '/' ? '' : inner}` : inner;
+}
+
+/**
+ * The absolute URL the live editor frames for `path`, through `cms.previewURL`, or `undefined` without a site.
+ */
+export function frameURL(path: string, token: string): string | undefined {
+  const cms = dashboardMeta()?.cms;
+  if (isUndefined(cms?.site)) return undefined;
+  const target = cms.previewURL.replaceAll('{path}', path).replaceAll('{token}', token);
+  return cms.site.replace(/\/+$/, '') + target;
 }

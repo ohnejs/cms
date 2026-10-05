@@ -16,6 +16,7 @@
     "ohne.layer.ts",
     "api/**/*.ts",
     "boot/**/*.ts",
+    "collections/**/*.ts",
     "fields/**/*.ts",
     "middleware/**/*.ts",
     "src/**/*.ts",

@@ -23,16 +23,22 @@ declare module 'ohnejs/base' {
        * Whether a path in the default locale starts with the locale too.
        */
       prefixDefaultLocale: boolean;
+
+      /**
+       * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
+       */
+      previewURL: string;
     };
   }
 }
 
 hook('dashboard:meta', (meta) => {
   const { locales } = useConfig().collections;
-  const { routes, site, prefixDefaultLocale } = useCMSConfig();
+  const { routes, site, prefixDefaultLocale, previewURL } = useCMSConfig();
   meta.cms = {
     routes: mapValues(routes, (_, value) => Object.fromEntries(routeEntries(value, locales))),
     prefixDefaultLocale,
+    previewURL,
   };
   if (!isUndefined(site)) meta.cms.site = site;
 });

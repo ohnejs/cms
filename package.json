@@ -12,6 +12,7 @@
   "files": [
     "api",
     "boot",
+    "collections",
     "dashboard",
     "fields",
     "messages",
