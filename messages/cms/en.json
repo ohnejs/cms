@@ -3,16 +3,28 @@
     "invalidPath": "`path` must be a site path starting with `/`"
   },
   "fields": {
-    "slug": { "label": "Slug" },
-    "status": { "label": "Status", "draft": "Draft", "published": "Published" },
+    "slug": {
+      "label": "Slug"
+    },
+    "status": {
+      "label": "Status",
+      "draft": "Draft",
+      "published": "Published"
+    },
     "publishedAt": {
       "label": "Published at",
       "description": "Empty publishes at once. A future time publishes then."
     },
-    "expiresAt": { "label": "Expires at", "description": "Empty never expires." }
+    "expiresAt": {
+      "label": "Expires at",
+      "description": "Empty never expires."
+    }
   },
   "validation": {
     "slug": "Use lowercase letters, digits, and hyphens",
     "slugNested": "A slug of this collection holds no slashes"
+  },
+  "liveView": {
+    "noPreview": "The website shows here once a site is set"
   }
 }

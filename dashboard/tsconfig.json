@@ -1,0 +1,3 @@
+{
+  "extends": "../.ohne/browser/tsconfig.json"
+}

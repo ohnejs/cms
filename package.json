@@ -12,6 +12,7 @@
   "files": [
     "api",
     "boot",
+    "dashboard",
     "fields",
     "messages",
     "middleware",
@@ -32,8 +33,9 @@
   "scripts": {
     "format": "oxfmt",
     "lint": "oxlint",
+    "prepare": "ohne prepare",
     "test": "NODE_COMPILE_CACHE=node_modules/.cache/node-compile node --test --expose-gc --import ohnejs/register \"tests/**/*.test.ts\"",
-    "typecheck": "tsc"
+    "typecheck": "tsc && tsc -p dashboard/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "26.0.0",

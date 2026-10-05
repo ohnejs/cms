@@ -4,6 +4,9 @@ node_modules/
 # Local link to the ohne checkout
 .pnpmfile.cjs
 
+# Generated
+.ohne/
+
 # Environment / secrets
 .env
 
