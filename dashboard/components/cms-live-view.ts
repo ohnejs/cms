@@ -1,5 +1,12 @@
-import type { BlockNode, BlocksTree, Child, DashboardCollection } from 'ohnejs/dashboard';
+import type {
+  BlockNode,
+  BlocksHandle,
+  BlocksTree,
+  Child,
+  DashboardCollection,
+} from 'ohnejs/dashboard';
 
+import { effectiveContentLocale } from 'app/components/content-language-switcher.ts';
 import { historyButtons } from 'app/components/history-buttons.ts';
 import {
   recordEditorFooter,
@@ -25,15 +32,10 @@ import {
   useT,
   when,
 } from 'ohnejs/dashboard';
-import {
-  effect,
-  isUndefined,
-  onCleanup,
-  readStored,
-  ref,
-  untracked,
-  writeStored,
-} from 'ohnejs/utils';
+import { effect, isUndefined, onCleanup, readStored, ref, writeStored } from 'ohnejs/utils';
+
+import { pageURL } from './cms-meta.ts';
+import { previewPane } from './cms-preview-pane.ts';
 
 const STORAGE_KEY = 'ohne-cms-live-view';
 const LEFT_WIDTH = 272;
@@ -126,19 +128,6 @@ css`
     flex: 1;
     display: flex;
     padding: 0.75rem;
-  }
-
-  .o-cms-lv-placeholder {
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 1.5rem;
-    border: 1px dashed hsl(var(--ohne-border));
-    border-radius: var(--ohne-radius);
-    color: hsl(var(--ohne-muted-foreground));
-    font-size: 0.875rem;
-    text-align: center;
   }
 
   .o-cms-lv-panel-right > .ohne-container {
@@ -335,15 +324,53 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
     h('div', { class: 'ohne-row' }, menuButton(), ...recordEditorHeading(editor)),
   );
 
+  const pane = previewPane({
+    url: () => pageURL(collection, effectiveContentLocale(), editor.saved()),
+    missing: () =>
+      t(
+        isUndefined(dashboardMeta()?.cms?.site)
+          ? 'cms.liveView.noPreview'
+          : 'cms.liveView.saveFirst',
+      ),
+    editable: editor.canWrite,
+    focused: () => selected()?.uuid,
+    highlighted: () => tree()?.highlighted()?.uuid,
+    labels: () =>
+      Object.fromEntries(
+        allNodes().flatMap((node) =>
+          isUndefined(node.uuid) ? [] : [[node.uuid, blockLabel(node)]],
+        ),
+      ),
+    saves: editor.saved,
+    onSelect: (uuid) => {
+      for (const field of blocksFields) {
+        const node = nodesOf(field.name).find((entry) => entry.uuid === uuid);
+        if (isUndefined(node)) continue;
+        active.value = field.name;
+        trees.get(field.name)?.select([node.$key]);
+        return;
+      }
+    },
+    onKey: (action) => {
+      if (action === 'save') {
+        void editor.save();
+        return;
+      }
+      const state = action === 'undo' ? editor.history.undo() : editor.history.redo();
+      if (!isUndefined(state)) editor.restore(state);
+    },
+  });
+
   const middleEl = h(
     'div',
     { class: 'o-cms-lv-panel-middle' },
+    h('div', { class: 'o-cms-lv-panel-live' }, pane.element),
     h(
       'div',
-      { class: 'o-cms-lv-panel-live' },
-      h('div', { class: 'o-cms-lv-placeholder' }, () => t('cms.liveView.noPreview')),
+      { class: 'o-cms-lv-footer o-cms-lv-footer-middle' },
+      () => breadcrumbs(),
+      pane.controls,
     ),
-    h('div', { class: 'o-cms-lv-footer o-cms-lv-footer-middle' }, () => breadcrumbs()),
   );
 
   const maxOf = (side: () => number) => (): number =>
@@ -570,6 +597,22 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   }
 
   /**
+   * Every block of the blocks field `name`, at every depth, in tree order.
+   */
+  function nodesOf(name: string): BlockNode[] {
+    const walk = (nodes: readonly BlockNode[]): BlockNode[] =>
+      nodes.flatMap((node) => [node, ...childLists(node).flatMap((list) => walk(list.nodes()))]);
+    return walk(blocksHandleOf(form.value?.controlOf(name))?.nodes() ?? []);
+  }
+
+  /**
+   * Every block of the record, at every depth.
+   */
+  function allNodes(): BlockNode[] {
+    return blocksFields.flatMap((field) => nodesOf(field.name));
+  }
+
+  /**
    * The label of a block instance, as the tree shows it.
    */
   function blockLabel(node: BlockNode): string {
@@ -581,13 +624,21 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
  * The innermost block under `node` whose own fields hold an error, so a failed save lands on it.
  */
 function deepestErrored(node: BlockNode): BlockNode {
-  const block = untracked(dashboardMeta)?.blocks.find((entry) => entry.name === node.block);
-  for (const field of block?.fields ?? []) {
-    if (field.type !== 'blocks') continue;
-    const child = blocksHandleOf(node.form.controlOf(field.name))
-      ?.nodes()
-      .find((entry) => entry.own.value !== '' || entry.form.errored());
+  for (const list of childLists(node)) {
+    const child = list.nodes().find((entry) => entry.own.value !== '' || entry.form.errored());
     if (!isUndefined(child)) return deepestErrored(child);
   }
   return node;
+}
+
+/**
+ * The lists of the `blocks` fields a block holds.
+ */
+function childLists(node: BlockNode): BlocksHandle[] {
+  const block = dashboardMeta()?.blocks.find((entry) => entry.name === node.block);
+  return (block?.fields ?? []).flatMap((field) => {
+    const list =
+      field.type === 'blocks' ? blocksHandleOf(node.form.controlOf(field.name)) : undefined;
+    return isUndefined(list) ? [] : [list];
+  });
 }

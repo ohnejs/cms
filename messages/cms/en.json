@@ -25,6 +25,15 @@
     "slugNested": "A slug of this collection holds no slashes"
   },
   "liveView": {
-    "noPreview": "The website shows here once a site is set"
+    "dimensions": "Dimensions",
+    "noPreview": "The website shows here once a site is set",
+    "reload": "Reload",
+    "saveFirst": "Save the page once to see it here",
+    "silent": {
+      "client": "Load the ohne client on this page.",
+      "framing": "Let this dashboard frame the website.",
+      "origin": "Check that the site URL in your cms settings matches the website.",
+      "title": "The website did not answer"
+    }
   }
 }
