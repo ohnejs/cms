@@ -10,9 +10,22 @@
     "url": "git+https://github.com/ohnejs/cms.git"
   },
   "files": [
-    "ohne.config.ts"
+    "api",
+    "boot",
+    "fields",
+    "messages",
+    "middleware",
+    "src",
+    "ohne.config.ts",
+    "ohne.layer.ts"
   ],
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
   "publishConfig": {
     "access": "public"
   },

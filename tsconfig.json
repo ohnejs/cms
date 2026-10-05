@@ -11,5 +11,14 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["ohne.config.ts", "src/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "ohne.config.ts",
+    "ohne.layer.ts",
+    "api/**/*.ts",
+    "boot/**/*.ts",
+    "fields/**/*.ts",
+    "middleware/**/*.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }
