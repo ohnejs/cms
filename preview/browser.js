@@ -144,10 +144,10 @@ if (new URL(import.meta.url).searchParams.has('auto')) connect();
 
 /**
  * Says hello to the dashboard and keeps the page in step with it until disposed.
- * The preview token leaves the address bar at once; the page refetches with it from memory.
+ * The preview token leaves the address bar at once, unless `keepToken`; the page refetches with it from memory.
  */
 function start(options) {
-  const token = takeToken();
+  const token = takeToken(options.keepToken === true);
   const state = {
     editable: false,
     texts: {},
@@ -402,12 +402,13 @@ function typing() {
 }
 
 /**
- * The preview token from the address bar, removed from it so it never lands in a bookmark or a log.
+ * The preview token from the address bar, removed from it unless `keep`, so it never lands in a bookmark.
+ * A framework that renders again from the URL on the server, like Next, keeps it.
  */
-function takeToken() {
+function takeToken(keep) {
   const url = new URL(location.href);
   const token = url.searchParams.get('ohne-preview');
-  if (token === null) return undefined;
+  if (token === null || keep) return token ?? undefined;
   url.searchParams.delete('ohne-preview');
   history.replaceState(history.state, '', url);
   return token;
