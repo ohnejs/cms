@@ -28,17 +28,23 @@ declare module 'ohnejs/base' {
        * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
        */
       previewURL: string;
+
+      /**
+       * The lifetimes a shared preview link may have, and the one chosen first.
+       */
+      share: { durations: string[]; default: string };
     };
   }
 }
 
 hook('dashboard:meta', (meta) => {
   const { locales } = useConfig().collections;
-  const { routes, site, prefixDefaultLocale, previewURL } = useCMSConfig();
+  const { routes, site, prefixDefaultLocale, previewURL, share } = useCMSConfig();
   meta.cms = {
     routes: mapValues(routes, (_, value) => Object.fromEntries(routeEntries(value, locales))),
     prefixDefaultLocale,
     previewURL,
+    share,
   };
   if (!isUndefined(site)) meta.cms.site = site;
 });

@@ -33,10 +33,20 @@ import {
   useT,
   when,
 } from 'ohnejs/dashboard';
-import { effect, isUndefined, onCleanup, readStored, ref, writeStored } from 'ohnejs/utils';
+import {
+  computed,
+  effect,
+  isArray,
+  isUndefined,
+  onCleanup,
+  readStored,
+  ref,
+  writeStored,
+} from 'ohnejs/utils';
 
 import { pagePath } from './cms-meta.ts';
 import { type PreviewBlock, previewPane } from './cms-preview-pane.ts';
+import { sharePopup } from './cms-share-popup.ts';
 
 const STORAGE_KEY = 'ohne-cms-live-view';
 const LEFT_WIDTH = 272;
@@ -265,12 +275,20 @@ css`
     min-inline-size: auto;
   }
 
+  .o-cms-lv-header .o-cms-lv-share {
+    margin-left: auto;
+  }
+
   .o-cms-lv-panels {
     flex-shrink: 0;
-    margin: -0.125rem 0 -0.125rem auto;
+    margin: -0.125rem 0;
   }
 
   @media (min-width: 1025px) {
+    .o-cms-lv-header .o-cms-lv-share {
+      margin-right: 0;
+    }
+
     .o-cms-lv-panels {
       display: none;
     }
@@ -378,34 +396,60 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   });
   panels.classList.add('o-cms-lv-panels');
 
+  const path = (): string | undefined =>
+    pagePath(
+      collection,
+      effectiveContentLocale(),
+      editor.create ? { slug: form.value?.controlOf('slug')?.read().value } : editor.saved(),
+    );
+
+  const draft = computed((): Record<string, unknown> | undefined => {
+    void editor.revision.value;
+    const reading = form.value?.read();
+    if (isUndefined(reading) || !isUndefined(reading.errors)) return undefined;
+    const values = (reading.value ?? {}) as Record<string, unknown>;
+    for (const field of blocksFields) {
+      stampBlocks(values[field.name], blocksHandleOf(form.value?.controlOf(field.name)));
+    }
+    return {
+      collection: collection.name,
+      record: editor.id() === '' ? draftKey : editor.id(),
+      locale: effectiveContentLocale(),
+      values,
+    };
+  });
+
+  const sharing = ref(false);
   const header = h(
     'div',
     { class: 'o-cms-lv-header' },
-    h('div', { class: 'ohne-row' }, menuButton(), ...recordEditorHeading(editor), panels),
+    h(
+      'div',
+      { class: 'ohne-row' },
+      menuButton(),
+      ...recordEditorHeading(editor),
+      shareButton(),
+      panels,
+    ),
+    when(
+      () => sharing.value,
+      () => {
+        sharePopup({
+          path,
+          draft: () => draft.value,
+          onClose: (close) =>
+            void close().then(() => {
+              sharing.value = false;
+            }),
+        });
+        return null;
+      },
+    ),
   );
 
   const pane = previewPane({
-    path: () =>
-      pagePath(
-        collection,
-        effectiveContentLocale(),
-        editor.create ? { slug: form.value?.controlOf('slug')?.read().value } : editor.saved(),
-      ),
-    draft: () => {
-      void editor.revision.value;
-      const reading = form.value?.read();
-      if (isUndefined(reading) || !isUndefined(reading.errors)) return undefined;
-      const values = (reading.value ?? {}) as Record<string, unknown>;
-      for (const field of blocksFields) {
-        stampBlocks(values[field.name], blocksHandleOf(form.value?.controlOf(field.name)));
-      }
-      return {
-        collection: collection.name,
-        record: editor.id() === '' ? draftKey : editor.id(),
-        locale: effectiveContentLocale(),
-        values,
-      };
-    },
+    path,
+    draft: () => draft.value,
     missing: () =>
       t(
         isUndefined(dashboardMeta()?.cms?.site) ? 'cms.liveView.noPreview' : 'cms.liveView.addSlug',
@@ -557,6 +601,28 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
       el.classList.toggle('ohne-button-accent', sidebarExpanded());
       el.classList.toggle('ohne-button-outline', !sidebarExpanded());
     });
+    return el;
+  }
+
+  /**
+   * The header's Share button, opening the share popup.
+   * It waits for a saved record, a page to show, a readable draft, and the right to change the record.
+   */
+  function shareButton(): HTMLElement {
+    const el = button(icon('share'), {
+      variant: 'outline',
+      class: 'o-cms-lv-share',
+      disabled: () =>
+        !editor.canWrite() ||
+        editor.create ||
+        isUndefined(dashboardMeta()?.cms?.site) ||
+        isUndefined(path()) ||
+        isUndefined(draft.value),
+      onClick: () => {
+        sharing.value = true;
+      },
+    });
+    onCleanup(attachTooltip(el, () => t('cms.liveView.share.title')));
     return el;
   }
 
@@ -758,9 +824,9 @@ function idOf(node: BlockNode | undefined): string | undefined {
  * The items follow the list's nodes one to one, since a draft is read only while no control errs.
  */
 function stampBlocks(value: unknown, list: BlocksHandle | undefined): void {
-  if (!Array.isArray(value) || isUndefined(list)) return;
+  if (!isArray<Record<string, unknown>[]>(value) || isUndefined(list)) return;
   const nodes = list.nodes();
-  value.forEach((item: Record<string, unknown>, index) => {
+  value.forEach((item, index) => {
     const node = nodes[index];
     if (isUndefined(node)) return;
     item.UUID = blockID(node);

@@ -1,8 +1,16 @@
-import type { LocaleCode } from 'ohnejs';
+import type { Config, LocaleCode } from 'ohnejs';
 import type { LayerStrategies } from 'ohnejs/utils';
 
 import { ohneError, useCollections, useConfig, useEnv } from 'ohnejs';
-import { compileRoute, isPlainObject, isString, isUndefined, withDefaults } from 'ohnejs/utils';
+import {
+  compileRoute,
+  isNull,
+  isPlainObject,
+  isString,
+  isUndefined,
+  parseDuration,
+  withDefaults,
+} from 'ohnejs/utils';
 
 declare module 'ohnejs' {
   interface Config {
@@ -75,6 +83,30 @@ declare module 'ohnejs' {
        * []
        */
       webhooks?: { url: string; secret: string }[];
+
+      /**
+       * How long a shared preview link may last.
+       * An editor picks one of `durations` when sharing, with `default` chosen first.
+       * A layer or app that sets it replaces the whole setting.
+       *
+       * @default
+       * { durations: ['1h', '1d', '7d', '30d'], default: '1d' }
+       */
+      share?: {
+        /**
+         * The lifetimes an editor picks from, each a duration like `'1h'` or `'7 days'`.
+         *
+         * @default
+         * ['1h', '1d', '7d', '30d']
+         */
+        durations?: string[];
+
+        /**
+         * The lifetime chosen first, one of `durations`.
+         * Omitted, it is the first of `durations`, or `'1d'` for the built-in list.
+         */
+        default?: string;
+      };
     };
   }
 
@@ -127,6 +159,11 @@ export interface ResolvedCMSConfig {
    * The URLs told about every change, each with the secret that signs its requests.
    */
   webhooks: { url: string; secret: string }[];
+
+  /**
+   * The lifetimes a shared preview link may have, and the one chosen first.
+   */
+  share: { durations: string[]; default: string };
 }
 
 /**
@@ -138,6 +175,7 @@ export const CMS_DEFAULTS = {
   previewURL: '{path}?ohne-preview={token}',
   homeSlug: 'index',
   webhooks: [],
+  share: { durations: ['1h', '1d', '7d', '30d'], default: '1d' },
 } satisfies Omit<ResolvedCMSConfig, 'site'>;
 
 /**
@@ -147,6 +185,7 @@ export const CMS_DEFAULTS = {
 export const CMS_STRATEGIES: LayerStrategies = {
   routes: 'assign',
   webhooks: 'replace',
+  share: 'replace',
 };
 
 useEnv().define('SITE_URL', { default: undefined });
@@ -156,7 +195,13 @@ useEnv().define('SITE_URL', { default: undefined });
  */
 export function useCMSConfig(): ResolvedCMSConfig {
   const config = withDefaults(useConfig().cms ?? {}, CMS_DEFAULTS, { strategies: CMS_STRATEGIES });
-  return { ...config, site: useEnv().get('SITE_URL') ?? config.site };
+  const share: NonNullable<NonNullable<Config['cms']>['share']> = config.share;
+  const durations = share.durations ?? CMS_DEFAULTS.share.durations;
+  return {
+    ...config,
+    site: useEnv().get('SITE_URL') ?? config.site,
+    share: { durations, default: share.default ?? durations[0]! },
+  };
 }
 
 /**
@@ -164,11 +209,12 @@ export function useCMSConfig(): ResolvedCMSConfig {
  * A boot file runs it, so a bad route stops the server before any page is asked for.
  */
 export function validateCMSConfig(): void {
-  const { site, routes, previewURL, webhooks } = useCMSConfig();
+  const { site, routes, previewURL, webhooks, share } = useCMSConfig();
+  validateShare(share);
   for (const hook of webhooks) {
     const url = URL.parse(hook.url);
     const local = url?.hostname === 'localhost' || url?.hostname === '127.0.0.1';
-    if (url === null || !(url.protocol === 'https:' || (url.protocol === 'http:' && local))) {
+    if (isNull(url) || !(url.protocol === 'https:' || (url.protocol === 'http:' && local))) {
       throw ohneError({
         title: `Invalid \`cms.webhooks\` URL \`${hook.url}\``,
         body: ['A webhook URL is `https`, or `http` on `localhost`.'],
@@ -239,6 +285,42 @@ export function validateCMSConfig(): void {
       }
       seen.set(shape, collection);
     }
+  }
+}
+
+/**
+ * Rejects a share lifetime that does not parse to a positive duration, and a `default` outside `durations`.
+ */
+function validateShare({ durations, default: initial }: ResolvedCMSConfig['share']): void {
+  if (durations.length === 0) {
+    throw ohneError({
+      title: '`cms.share.durations` is empty',
+      body: ["List the lifetimes an editor may give a shared link, like `['1d', '7d']`."],
+    });
+  }
+  for (const duration of durations) {
+    if (lifetime(duration) > 0) continue;
+    throw ohneError({
+      title: `Invalid \`cms.share.durations\` value \`${duration}\``,
+      body: ["A duration is a positive length of time, like `'1h'`, `'7d'`, or `'2 weeks'`."],
+    });
+  }
+  if (!durations.includes(initial)) {
+    throw ohneError({
+      title: `\`cms.share.default\` \`${initial}\` is not a share duration`,
+      body: [`Pick one of ${durations.map((duration) => `\`${duration}\``).join(', ')}.`],
+    });
+  }
+}
+
+/**
+ * The milliseconds `duration` spans, or `NaN` when it does not parse.
+ */
+function lifetime(duration: string): number {
+  try {
+    return parseDuration(duration);
+  } catch {
+    return Number.NaN;
   }
 }
 

@@ -2,7 +2,7 @@ import type { QueryRecord } from 'ohnejs';
 
 import { HTTPError, queryMetadata, queryUntyped } from 'ohnejs';
 import { queryScoped } from 'ohnejs/auth';
-import { decodeRouteParams, isString, isUndefined } from 'ohnejs/utils';
+import { decodeRouteParams, isNull, isString, isUndefined } from 'ohnejs/utils';
 
 import type { Draft } from './preview/drafts.ts';
 
@@ -35,7 +35,8 @@ export type Resolved =
  * The path's locale prefix picks the locale; the most specific pattern that finds a record wins.
  * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`, and that slug's own path redirects to `/`.
  * A path no page answers carries the page with the slug `404`, when there is one.
- * With `drafts`, an editor's unsaved state wins over the saved record, and a draft's slug finds its page.
+ * With `drafts`, an editor's unsaved state wins over the saved record.
+ * A draft's slug finds its page, unless another saved record holds that slug.
  * The record's relations load one level deep, at the top and inside its blocks.
  */
 export async function resolvePath(raw: string, drafts: readonly Draft[] = []): Promise<Resolved> {
@@ -48,7 +49,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
   const home = split.path === '/' || split.path === '';
   for (const route of routesIn(split.locale)) {
     const params = home && isHome(route) ? { slug: homeSlug } : route.match(split.path);
-    if (params === null) continue;
+    if (isNull(params)) continue;
     const slug = decodeRouteParams(params).slug;
     const record = await readPage(route, slug, drafts);
     if (isUndefined(record)) continue;
@@ -111,7 +112,7 @@ async function readPage(
       draft.collection === route.collection && (draft.locale === route.locale || !translatable),
   );
   const drafted = own.find((draft) => isUndefined(slug) || draft.values.slug === slug);
-  if (!isUndefined(drafted)) {
+  if (!isUndefined(drafted) && !(await heldElsewhere(route, slug, drafted.record, translatable))) {
     const saved = await readTrusted(route, drafted.record, translatable);
     return { ...saved, ...drafted.values, UUID: drafted.record };
   }
@@ -139,6 +140,25 @@ async function readScoped(
   if (translatable) builder.locale(route.locale);
   if (!isUndefined(slug)) builder.where({ slug });
   return builder.findFirst();
+}
+
+/**
+ * Whether a saved record other than `record` holds `slug`, whatever its publish state.
+ * Such a slug stays its holder's, so a draft can never lay itself over a page its editor may not change.
+ */
+async function heldElsewhere(
+  route: CMSRoute,
+  slug: string | undefined,
+  record: string,
+  translatable: boolean,
+): Promise<boolean> {
+  if (isUndefined(slug)) return false;
+  const builder = queryUntyped(route.collection).where({
+    slug,
+    UUID: { not: { equalsTo: record } },
+  });
+  if (translatable) builder.locale(route.locale);
+  return builder.exists();
 }
 
 /**

@@ -33,9 +33,7 @@ export interface Draft {
  * Every field the public could not read is dropped, at any depth.
  */
 export async function writeDraft(token: PreviewToken, input: unknown): Promise<Draft> {
-  const draft = parseDraft(input);
-  await assertWritable(draft.collection, draft.record);
-  draft.values = clean(draft.values, queryMetadata(draft.collection).fields);
+  const draft = await checkDraft(input);
   const key = {
     tokenHash: token.tokenHash,
     collection: draft.collection,
@@ -62,6 +60,17 @@ export async function draftsOf(token: PreviewToken): Promise<Draft[]> {
 }
 
 /**
+ * The draft body of a request, its values cleaned of every field the public could not read.
+ * A malformed body is a `400`; a record the caller may not change is a `403`.
+ */
+export async function checkDraft(input: unknown): Promise<Draft> {
+  const draft = parseDraft(input);
+  await assertWritable(draft.collection, draft.record);
+  draft.values = clean(draft.values, queryMetadata(draft.collection).fields);
+  return draft;
+}
+
+/**
  * The draft body of a request, or a `400` naming what is wrong with it.
  */
 function parseDraft(input: unknown): Draft {
@@ -80,10 +89,10 @@ function parseDraft(input: unknown): Draft {
 }
 
 /**
- * Refuses a draft of a record the caller may not change: an existing one outside their update scope,
- * or a new one in a collection they may not create in.
+ * Refuses a draft of a record the caller may not change.
+ * That is an existing record outside their update scope, or a new one in a collection they may not create in.
  */
-async function assertWritable(collection: string, record: string): Promise<void> {
+export async function assertWritable(collection: string, record: string): Promise<void> {
   try {
     if (await queryUntyped(collection).where({ UUID: record }).exists()) {
       const scoped = await queryScoped(collection, 'update');

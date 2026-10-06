@@ -1,6 +1,7 @@
-import { rejects } from 'node:assert';
+import { deepStrictEqual, rejects } from 'node:assert';
 import { describe, it } from 'node:test';
 
+import { useCMSConfig } from '../src/config.ts';
 import { startApp } from './_app.ts';
 
 const PAGES = `import { defineCollection, field } from 'ohnejs';
@@ -98,5 +99,34 @@ describe('cms config', () => {
       { 'ohne.config.ts': config("{ site: 'example.com' }") },
       /Invalid `cms.site` value/,
     );
+  });
+
+  it('refuses a share duration that does not parse', async () => {
+    await refuses(
+      { 'ohne.config.ts': config("{ share: { durations: ['1d', 'soon'] } }") },
+      /Invalid `cms.share.durations` value `soon`/,
+    );
+    await refuses(
+      { 'ohne.config.ts': config("{ share: { durations: ['0h'], default: '0h' } }") },
+      /Invalid `cms.share.durations` value `0h`/,
+    );
+  });
+
+  it('refuses a share default outside the durations', async () => {
+    await refuses(
+      { 'ohne.config.ts': config("{ share: { durations: ['1h', '2h'], default: '1d' } }") },
+      /`cms.share.default` `1d` is not a share duration/,
+    );
+  });
+
+  it('picks the first of a share list set without a default', async () => {
+    const app = await startApp({
+      'ohne.config.ts': config("{ share: { durations: ['2h', '3d'] } }"),
+    });
+    try {
+      deepStrictEqual(useCMSConfig().share, { durations: ['2h', '3d'], default: '2h' });
+    } finally {
+      await app.stop();
+    }
   });
 });

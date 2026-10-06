@@ -50,6 +50,24 @@
     "noPreview": "The website shows here once a site is set",
     "preview": "Preview",
     "reload": "Reload",
+    "share": {
+      "active": "Active links",
+      "copied": "Link copied",
+      "copy": "Copy link",
+      "copyFailed": "Could not copy the link",
+      "create": "Create link",
+      "createFailed": "Could not create the link",
+      "expires": "Expires `{when}`",
+      "expiresAfter": "Expires after",
+      "gone": "Removed account",
+      "intro": "Anyone with the link sees this page as it is now, unsaved changes included, until it expires. Later changes do not show.",
+      "link": "Link",
+      "none": "No active links",
+      "revoke": "Revoke link",
+      "revokeFailed": "Could not revoke the link",
+      "title": "Share preview",
+      "you": "You"
+    },
     "silent": {
       "client": "Load the ohne client on this page.",
       "framing": "Let this dashboard frame the website.",
@@ -62,6 +80,12 @@
     "invalidToken": "This preview token is not yours, or it has expired",
     "notWritable": "You may not change this record",
     "signIn": "Sign in to preview your website"
+  },
+  "share": {
+    "invalidDuration": "`duration` must be one of the share durations",
+    "invalidRecord": "A share list needs a routed `collection` and a `record`",
+    "notFound": "This shared link does not exist",
+    "unsaved": "Save the record before you share it"
   },
   "site": {
     "name": {

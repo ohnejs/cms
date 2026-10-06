@@ -28,6 +28,11 @@ declare module 'ohnejs/dashboard' {
        * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
        */
       previewURL: string;
+
+      /**
+       * The lifetimes a shared preview link may have, and the one chosen first.
+       */
+      share: { durations: string[]; default: string };
     };
   }
 }

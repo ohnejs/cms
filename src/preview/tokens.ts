@@ -1,6 +1,6 @@
 import { forbidden, queryUntyped, translate, unauthorized } from 'ohnejs';
 import { useSession } from 'ohnejs/auth';
-import { isUndefined } from 'ohnejs/utils';
+import { isNull, isUndefined } from 'ohnejs/utils';
 import { digest, randomToken } from 'ohnejs/utils/crypto';
 
 const LIFETIME = 8 * 60 * 60 * 1000;
@@ -20,7 +20,7 @@ export interface PreviewToken {
  */
 export async function mintToken(): Promise<{ token: string; expiresAt: number }> {
   const session = await useSession();
-  if (session === null) throw unauthorized(translate('cms.preview.signIn'));
+  if (isNull(session)) throw unauthorized(translate('cms.preview.signIn'));
   await sweep();
   const token = randomToken();
   const expiresAt = Math.min(Date.now() + LIFETIME, session.expiresAt);
@@ -53,7 +53,7 @@ export async function readToken(token: string): Promise<PreviewToken | undefined
 export async function ownToken(token: string): Promise<PreviewToken> {
   const row = await readToken(token);
   const session = await useSession();
-  if (isUndefined(row) || session === null || session.UUID !== row.session) {
+  if (isUndefined(row) || isNull(session) || session.UUID !== row.session) {
     throw forbidden(translate('cms.preview.invalidToken'));
   }
   return row;
@@ -78,6 +78,6 @@ async function sweep(): Promise<void> {
 /**
  * The stored form of a token: its SHA-256, base64url-encoded.
  */
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return digest('sha256', token).toBase64({ alphabet: 'base64url', omitPadding: true });
 }
