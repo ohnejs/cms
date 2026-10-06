@@ -67,19 +67,6 @@ css`
     font-weight: 500;
   }
 
-  .o-cms-lv-header .ohne-button {
-    margin-right: 0.25rem;
-    margin-left: 0.25rem;
-  }
-
-  .o-cms-lv-header .ohne-button:first-child {
-    margin-left: 0;
-  }
-
-  .o-cms-lv-header .ohne-button:last-child {
-    margin-right: 0;
-  }
-
   .o-cms-lv-wrapper {
     flex: 1;
     display: flex;
@@ -285,10 +272,6 @@ css`
   }
 
   @media (min-width: 1025px) {
-    .o-cms-lv-header .o-cms-lv-share {
-      margin-right: 0;
-    }
-
     .o-cms-lv-panels {
       display: none;
     }
