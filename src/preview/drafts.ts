@@ -41,8 +41,8 @@ export async function writeDraft(token: PreviewToken, input: unknown): Promise<D
     locale: draft.locale,
   };
   const values = JSON.stringify(draft.values);
-  const updated = await queryUntyped('CmsDrafts').where(key).updateOrThrow({ values });
-  if (updated.length === 0) await queryUntyped('CmsDrafts').createOrThrow({ ...key, values });
+  const updated = await queryUntyped('CMSDrafts').where(key).updateOrThrow({ values });
+  if (updated.length === 0) await queryUntyped('CMSDrafts').createOrThrow({ ...key, values });
   return draft;
 }
 
@@ -50,7 +50,7 @@ export async function writeDraft(token: PreviewToken, input: unknown): Promise<D
  * Every draft stored under the token.
  */
 export async function draftsOf(token: PreviewToken): Promise<Draft[]> {
-  const rows = await queryUntyped('CmsDrafts').where({ tokenHash: token.tokenHash }).findMany();
+  const rows = await queryUntyped('CMSDrafts').where({ tokenHash: token.tokenHash }).findMany();
   return rows.map((row) => ({
     collection: row.collection as string,
     record: row.record as string,

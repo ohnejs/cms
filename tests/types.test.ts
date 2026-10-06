@@ -17,7 +17,7 @@ export async function assertTypes(name: string): Promise<void> {
     api: { read: { public: true, access: publishedScope } },
   });
   await queryScoped(name, 'read');
-  await queryScoped('CmsShares', 'read');
+  await queryScoped('CMSShares', 'read');
   // @ts-expect-error - no such collection
-  await queryScoped('CmsShraes', 'read');
+  await queryScoped('CMSShraes', 'read');
 }

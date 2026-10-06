@@ -99,7 +99,7 @@ export async function createShare(
   await sweep();
   const token = randomToken();
   const expiresAt = Date.now() + parseDuration(duration);
-  const { UUID } = await queryUntyped('CmsShares').createOrThrow({
+  const { UUID } = await queryUntyped('CMSShares').createOrThrow({
     tokenHash: hashToken(token),
     collection,
     record,
@@ -117,7 +117,7 @@ export async function createShare(
  * No session binds it: a link outlives its editor's login.
  */
 export async function readShare(token: string): Promise<Share | undefined> {
-  const row = await queryUntyped('CmsShares')
+  const row = await queryUntyped('CMSShares')
     .where({ tokenHash: hashToken(token), expiresAt: { greaterThan: Date.now() } })
     .findFirst();
   if (isUndefined(row)) return undefined;
@@ -146,7 +146,7 @@ export async function sharesOf(collection: unknown, record: unknown): Promise<Sh
     throw badRequest(translate('cms.share.invalidRecord'));
   }
   await assertWritable(collection, record);
-  const rows = await queryUntyped('CmsShares')
+  const rows = await queryUntyped('CMSShares')
     .where({ collection, record, expiresAt: { greaterThan: Date.now() } })
     .orderBy('_updatedAt', 'desc')
     .findMany();
@@ -173,10 +173,10 @@ export async function sharesOf(collection: unknown, record: unknown): Promise<Sh
  */
 export async function revokeShare(UUID: string): Promise<void> {
   await sessionUser();
-  const row = await queryUntyped('CmsShares').where({ UUID }).findFirst();
+  const row = await queryUntyped('CMSShares').where({ UUID }).findFirst();
   if (isUndefined(row)) throw notFound(translate('cms.share.notFound'));
   await assertWritable(row.collection as string, row.record as string);
-  await queryUntyped('CmsShares').where({ UUID }).delete();
+  await queryUntyped('CMSShares').where({ UUID }).delete();
 }
 
 /**
@@ -192,7 +192,7 @@ async function sessionUser(): Promise<string> {
  * Deletes every expired share.
  */
 async function sweep(): Promise<void> {
-  await queryUntyped('CmsShares')
+  await queryUntyped('CMSShares')
     .where({ expiresAt: { atMost: Date.now() } })
     .delete();
 }

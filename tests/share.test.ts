@@ -197,7 +197,7 @@ describe('preview shares', () => {
   it('stops at expiry and once revoked', async () => {
     const cookie = await signIn('ada@example.com');
     const expiring = (await share(cookie)).body;
-    await queryUntyped('CmsShares')
+    await queryUntyped('CMSShares')
       .where({ UUID: expiring.UUID })
       .updateOrThrow({ expiresAt: Date.now() - 1 });
     strictEqual((await resolve('/about', expiring.token)).body.record.title, 'About (saved)');

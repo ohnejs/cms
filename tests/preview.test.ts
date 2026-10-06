@@ -168,13 +168,13 @@ describe('preview drafts', () => {
     const again = await signIn('ada@example.com');
     const fresh = await mint(again);
     await put(again, fresh.token, { record: about, values: { title: 'Stale', slug: 'about' } });
-    await queryUntyped('CmsPreviewTokens')
+    await queryUntyped('CMSPreviewTokens')
       .where({ expiresAt: { greaterThan: 0 } })
       .updateOrThrow({ expiresAt: Date.now() - 1 });
     strictEqual((await resolve('/about', fresh.token)).body.record.title, 'About');
 
     await mint(await signIn('ada@example.com'));
-    const left = await queryUntyped('CmsDrafts').findMany();
+    const left = await queryUntyped('CMSDrafts').findMany();
     strictEqual(
       left.some((row) => JSON.parse(row.values as string).title === 'Stale'),
       false,

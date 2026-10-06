@@ -24,7 +24,7 @@ export async function mintToken(): Promise<{ token: string; expiresAt: number }>
   await sweep();
   const token = randomToken();
   const expiresAt = Math.min(Date.now() + LIFETIME, session.expiresAt);
-  await queryUntyped('CmsPreviewTokens').createOrThrow({
+  await queryUntyped('CMSPreviewTokens').createOrThrow({
     tokenHash: hashToken(token),
     session: session.UUID,
     expiresAt,
@@ -36,7 +36,7 @@ export async function mintToken(): Promise<{ token: string; expiresAt: number }>
  * The live row of `token`, or `undefined` when it is unknown, expired, or its session has ended.
  */
 export async function readToken(token: string): Promise<PreviewToken | undefined> {
-  const row = (await queryUntyped('CmsPreviewTokens')
+  const row = (await queryUntyped('CMSPreviewTokens')
     .where({ tokenHash: hashToken(token) })
     .findFirst()) as PreviewToken | undefined;
   if (isUndefined(row) || row.expiresAt <= Date.now()) return undefined;
@@ -63,14 +63,14 @@ export async function ownToken(token: string): Promise<PreviewToken> {
  * Deletes every expired token and the drafts kept under it.
  */
 async function sweep(): Promise<void> {
-  const hashes = await queryUntyped('CmsPreviewTokens')
+  const hashes = await queryUntyped('CMSPreviewTokens')
     .where({ expiresAt: { atMost: Date.now() } })
     .pluck('tokenHash');
   if (hashes.length === 0) return;
-  await queryUntyped('CmsDrafts')
+  await queryUntyped('CMSDrafts')
     .where({ tokenHash: { in: hashes } })
     .delete();
-  await queryUntyped('CmsPreviewTokens')
+  await queryUntyped('CMSPreviewTokens')
     .where({ tokenHash: { in: hashes } })
     .delete();
 }
