@@ -4,8 +4,6 @@ Turns an [ohne](https://ohne.dev) app into the CMS for a website. Build the webs
 React, or plain HTML. Your editors edit its pages in the ohne dashboard, with the live website
 beside the form.
 
-It is in early development and not ready to install yet.
-
 ## Install
 
 You need Node 26 or newer.
