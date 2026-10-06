@@ -168,7 +168,6 @@ css`
     gap: 0.25rem;
     flex: 1;
     min-width: 0;
-    overflow: hidden;
     font-size: 0.75rem;
     font-weight: 500;
   }
@@ -183,13 +182,22 @@ css`
     color: hsl(var(--ohne-muted-foreground));
     font: inherit;
     text-align: left;
-    text-decoration: none;
+    border-radius: min(var(--ohne-radius), 0.125rem);
+    transition: var(--ohne-transition);
+    transition-property: color;
     cursor: pointer;
   }
 
   .o-cms-lv-breadcrumb:hover,
   .o-cms-lv-breadcrumb:focus-visible {
     color: hsl(var(--ohne-foreground));
+  }
+
+  .o-cms-lv-breadcrumb:focus-visible {
+    box-shadow:
+      0 0 0 0.125rem hsl(var(--ohne-background)),
+      0 0 0 0.25rem hsl(var(--ohne-ring));
+    outline: 0.125rem solid transparent;
   }
 
   .o-cms-lv-breadcrumb-active,
@@ -674,14 +682,14 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
                 'button',
                 {
                   type: 'button',
-                  class: 'o-cms-lv-breadcrumb ohne-truncate',
+                  class: 'o-cms-lv-breadcrumb ohne-raw ohne-truncate',
                   onClick: () => tree()?.select([entry.$key]),
                 },
                 label,
               );
         return index === 0
           ? [crumb]
-          : [h('span', { class: 'o-cms-lv-breadcrumb-separator' }, '/'), crumb];
+          : [h('span', { class: 'o-cms-lv-breadcrumb-separator ohne-shrink-0' }, '/'), crumb];
       }),
     );
   }
