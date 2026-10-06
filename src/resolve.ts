@@ -1,6 +1,6 @@
 import type { QueryRecord } from 'ohnejs';
 
-import { HTTPError, queryMetadata, queryUntyped } from 'ohnejs';
+import { HTTPError, queryMetadata, queryUntyped, useConfig } from 'ohnejs';
 import { queryScoped } from 'ohnejs/auth';
 import { decodeRouteParams, isNull, isString, isUndefined } from 'ohnejs/utils';
 
@@ -35,6 +35,7 @@ export type Resolved =
  * The path's locale prefix picks the locale; the most specific pattern that finds a record wins.
  * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`, and that slug's own path redirects to `/`.
  * A path no page answers carries the page with the slug `404`, when there is one.
+ * A path whose locale prefix is ruled out carries the default locale's.
  * With `drafts`, an editor's unsaved state wins over the saved record.
  * A draft's slug finds its page, unless another saved record holds that slug.
  * The record's relations load one level deep, at the top and inside its blocks.
@@ -44,7 +45,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
   const redirect = await redirectOf(url);
   if (!isUndefined(redirect)) return redirect;
   const split = splitLocale(url.pathname);
-  if (isUndefined(split)) return { kind: 'notFound' };
+  if (isUndefined(split)) return missIn(useConfig().collections.defaultLocale, drafts);
   const { homeSlug } = useCMSConfig();
   const home = split.path === '/' || split.path === '';
   for (const route of routesIn(split.locale)) {
@@ -68,8 +69,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
       alternates: await alternatesOf(route.collection, record, route.locale),
     };
   }
-  const page = await notFoundPage(split.locale, drafts);
-  return isUndefined(page) ? { kind: 'notFound' } : { kind: 'notFound', page };
+  return missIn(split.locale, drafts);
 }
 
 /**
@@ -85,17 +85,15 @@ async function redirectOf(url: URL): Promise<Resolved | undefined> {
 }
 
 /**
- * The page with the slug `404` under the root catch-all, to show where nothing else is, or `undefined`.
+ * A miss in `locale`, carrying the page with the slug `404` under the root catch-all when there is one.
  */
-async function notFoundPage(
-  locale: string,
-  drafts: readonly Draft[],
-): Promise<QueryRecord | undefined> {
+async function missIn(locale: string, drafts: readonly Draft[]): Promise<Resolved> {
   const route = routesIn(locale).find(isHome);
-  if (isUndefined(route)) return undefined;
-  const record = await readPage(route, '404', drafts);
-  if (!isUndefined(record)) await loadRelations(record, route.collection, route.locale);
-  return record;
+  if (isUndefined(route)) return { kind: 'notFound' };
+  const page = await readPage(route, '404', drafts);
+  if (isUndefined(page)) return { kind: 'notFound' };
+  await loadRelations(page, route.collection, route.locale);
+  return { kind: 'notFound', page };
 }
 
 /**

@@ -115,6 +115,14 @@ export default defineCollection({
     strictEqual(lost.page.title, 'Lost');
   });
 
+  it('carries the 404 page on a path whose locale prefix is ruled out', async () => {
+    for (const path of ['/en', '/en/about']) {
+      const lost = await resolve(path);
+      strictEqual(lost.kind, 'notFound', path);
+      strictEqual(lost.page?.title, 'Lost', path);
+    }
+  });
+
   it('answers a redirect before any page, forwarding the query when asked', async () => {
     deepStrictEqual(await resolve('/old/'), { kind: 'redirect', to: '/about', code: 308 });
     deepStrictEqual(await resolve('/go?ref=x'), {
