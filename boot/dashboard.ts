@@ -25,6 +25,11 @@ declare module 'ohnejs/base' {
       prefixDefaultLocale: boolean;
 
       /**
+       * The slug under `/[...slug]` whose page shows at `/`.
+       */
+      homeSlug: string;
+
+      /**
        * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
        */
       previewURL: string;
@@ -39,10 +44,11 @@ declare module 'ohnejs/base' {
 
 hook('dashboard:meta', (meta) => {
   const { locales } = useConfig().collections;
-  const { routes, site, prefixDefaultLocale, previewURL, share } = useCMSConfig();
+  const { routes, site, prefixDefaultLocale, homeSlug, previewURL, share } = useCMSConfig();
   meta.cms = {
     routes: mapValues(routes, (_, value) => Object.fromEntries(routeEntries(value, locales))),
     prefixDefaultLocale,
+    homeSlug,
     previewURL,
     share,
   };

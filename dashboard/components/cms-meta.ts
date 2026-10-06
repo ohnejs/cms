@@ -25,6 +25,11 @@ declare module 'ohnejs/dashboard' {
       prefixDefaultLocale: boolean;
 
       /**
+       * The slug under `/[...slug]` whose page shows at `/`.
+       */
+      homeSlug: string;
+
+      /**
        * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
        */
       previewURL: string;
@@ -47,6 +52,7 @@ export function hasPages(collection: DashboardCollection): boolean {
 /**
  * The site path of a record's page in `locale`, or `undefined` when it has no page there yet.
  * A route with a `[slug]` needs a slug; a singleton's static route needs nothing.
+ * The home slug under `/[...slug]` is `/`, the path the site serves it at.
  */
 export function pagePath(
   collection: DashboardCollection,
@@ -61,7 +67,12 @@ export function pagePath(
   if (isUndefined(pattern)) return undefined;
   const slug = record.slug;
   if (pattern.includes('[') && (!isString(slug) || slug === '')) return undefined;
-  const inner = pattern.includes('[') ? fillRoute(pattern, { slug: slug as string }) : pattern;
+  const inner =
+    pattern === '/[...slug]' && slug === cms.homeSlug
+      ? '/'
+      : pattern.includes('[')
+        ? fillRoute(pattern, { slug: slug as string })
+        : pattern;
   const prefixed =
     meta.locales.length > 1 && (locale !== meta.defaultLocale || cms.prefixDefaultLocale);
   return prefixed ? `/${locale}${inner === '/' ? '' : inner}` : inner;
