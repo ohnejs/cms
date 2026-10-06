@@ -1,6 +1,7 @@
 import type { AccessScope } from 'ohnejs';
 
 import { useUser, userCan } from 'ohnejs/auth';
+import { isNull } from 'ohnejs/utils';
 
 /**
  * The read access of a collection with pages: published records, inside their publish window.
@@ -12,9 +13,11 @@ import { useUser, userCan } from 'ohnejs/auth';
  * api: { read: { public: true, access: publishedScope } }
  * ```
  */
-export async function publishedScope(): Promise<AccessScope | true> {
+export async function publishedScope(): Promise<
+  AccessScope<'status' | 'publishedAt' | 'expiresAt'> | true
+> {
   const user = await useUser();
-  if (user !== null && userCan(user, 'cms.drafts')) return true;
+  if (!isNull(user) && userCan(user, 'cms.drafts')) return true;
   const now = Date.now();
   return {
     where: {

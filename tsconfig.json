@@ -20,6 +20,8 @@
     "fields/**/*.ts",
     "middleware/**/*.ts",
     "src/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    ".ohne/node/**/*.ts",
+    ".ohne/shared/**/*.ts"
   ]
 }
