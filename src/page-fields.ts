@@ -69,6 +69,7 @@ export function pageFields(options: PageFieldsOptions = {}) {
         image: field('image', { label: 'cms.fields.seo.image.label' }),
         noindex: field('boolean', {
           default: false,
+          display: 'switch',
           label: 'cms.fields.seo.noindex.label',
           description: 'cms.fields.seo.noindex.description',
         }),

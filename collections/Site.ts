@@ -25,6 +25,7 @@ export default defineCollection({
     image: field('image', { label: 'cms.site.image.label' }),
     noindex: field('boolean', {
       default: false,
+      display: 'switch',
       label: 'cms.site.noindex.label',
       description: 'cms.site.noindex.description',
     }),
