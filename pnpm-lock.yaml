@@ -12,8 +12,8 @@ importers:
         specifier: 26.0.0
         version: 26.0.0
       ohnejs:
-        specifier: 0.0.1
-        version: 0.0.1
+        specifier: 0.0.2
+        version: 0.0.2
       oxfmt:
         specifier: 0.55.0
         version: 0.55.0
@@ -393,8 +393,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  ohnejs@0.0.1:
-    resolution: {integrity: sha512-vGUw4SfE2cnuZzuz2+psvE5FhrGk16XwMUdnvlj9zuPrKrcc2Uqt9EIyqZZemdORSgkPr/vIhvPrWdXGsAIqgQ==}
+  ohnejs@0.0.2:
+    resolution: {integrity: sha512-zMSPwxvGmLkokYmtVWMbmEx8RFXo27tnzxKPkYeB9Dql5En9KJ5qA8p3qjTYRAnw5ejxNA6BJXIT+NZU9ugRuA==}
     engines: {node: '>=26.0.0'}
     hasBin: true
 
@@ -616,7 +616,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  ohnejs@0.0.1: {}
+  ohnejs@0.0.2: {}
 
   oxfmt@0.55.0:
     dependencies:
