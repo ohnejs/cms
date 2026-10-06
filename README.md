@@ -35,7 +35,7 @@ Your website reads its pages with [`@ohnejs/client`](https://github.com/ohnejs/c
 
 ## Docs
 
-- [The CMS](https://ohne.dev/docs/cms/cms) - pages, routes, and the live editor.
+- [The CMS](https://ohne.dev/docs/cms/setup) - pages, routes, and the live editor.
 - [Your website](https://ohne.dev/docs/cms/website) - reading pages and joining the live preview.
 - [Frameworks](https://ohne.dev/docs/cms/frameworks) - recipes for Nuxt, Next, React, and plain
   HTML.

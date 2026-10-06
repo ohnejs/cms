@@ -2,7 +2,7 @@
   "name": "@ohnejs/cms",
   "version": "0.0.1",
   "description": "Pages, routes, SEO and a live preview editor for ohne.",
-  "homepage": "https://github.com/ohnejs/cms#readme",
+  "homepage": "https://ohne.dev/docs/cms/setup",
   "license": "MIT",
   "author": "Muris Ceman <muris@ohne.dev>",
   "repository": {
