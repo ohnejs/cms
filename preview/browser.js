@@ -109,22 +109,11 @@ const STYLE = `
     height: 1.125rem;
     padding: 0 0.375rem;
     overflow: hidden;
-    border-bottom-left-radius: 0.25rem;
     background-color: var(--ohne-preview, #4c7be5);
     color: var(--ohne-preview-foreground, #ffffff);
     font: 0.75rem/1rem var(--ohne-font-family, Arial, sans-serif);
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-
-  .label.above {
-    max-width: calc(100% + 4px);
-    border-radius: 0.25rem 0.25rem 0 0;
-    transform: translate3d(2px, calc(-100% - 3px), 0);
-  }
-
-  .label.faded {
-    opacity: 0.64;
   }
 `;
 
