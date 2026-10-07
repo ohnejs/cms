@@ -1,4 +1,5 @@
 import type { FieldQueryMeta, QueryRecord } from 'ohnejs';
+import type { RecordLink } from 'ohnejs/utils';
 
 import {
   blockQueryMetadata,
@@ -9,9 +10,17 @@ import {
   useEvent,
 } from 'ohnejs';
 import { queryScoped } from 'ohnejs/auth';
-import { isArray, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
+import {
+  chunk,
+  groupBy,
+  isArray,
+  isPlainObject,
+  isString,
+  isUndefined,
+  uniqueArray,
+} from 'ohnejs/utils';
 
-import { routePath, routesIn } from './routes.ts';
+import { type CMSRoute, routePath, routesIn } from './routes.ts';
 
 /**
  * Where one relation value sits: the object holding it and its key.
@@ -30,6 +39,7 @@ interface Slot {
  * Upload URLs become absolute, so a site on another origin can show them.
  * A loaded record of a collection with pages carries its `path`, so a site links to it.
  * The loaded records keep their own relations as `UUID`s.
+ * A record link carries `href`, its target's path, when the reader can open that page.
  */
 export async function loadRelations(
   record: QueryRecord,
@@ -37,7 +47,8 @@ export async function loadRelations(
   locale: string,
 ): Promise<void> {
   const slots: Slot[] = [];
-  collect(record, queryMetadata(collection).fields, slots);
+  const links: RecordLink[] = [];
+  collect(record, queryMetadata(collection).fields, slots, links);
   const wanted = new Map<string, Set<string>>();
   for (const slot of slots) {
     const ids = wanted.get(slot.target) ?? new Set<string>();
@@ -55,35 +66,78 @@ export async function loadRelations(
       ? idsOf(value).flatMap((id) => records.get(id) ?? [])
       : (records.get(isString(value) ? value : '') ?? null);
   }
+  await resolveLinks(links, locale);
 }
 
 /**
- * Records every relation slot under `value`, descending into blocks and child tables.
+ * Records every relation slot and record link under `value`, descending into blocks and child tables.
  */
 function collect(
   value: Record<string, unknown>,
   fields: Readonly<Record<string, FieldQueryMeta>>,
   slots: Slot[],
+  links: RecordLink[],
 ): void {
   for (const [key, meta] of Object.entries(fields)) {
     const held = value[key];
     if ((meta.kind === 'record' || meta.kind === 'records') && !isUndefined(meta.target)) {
       if (!isUndefined(held))
         slots.push({ holder: value, key, target: meta.target, many: meta.kind === 'records' });
+    } else if (meta.kind === 'column') {
+      for (const entry of meta.fieldType?.links?.(held) ?? []) links.push(entry.link);
     } else if (meta.kind === 'blocks') {
       for (const item of isArray(held) ? held : []) {
         if (!isPlainObject(item) || !isString(item.block) || !isPlainObject(item.fields)) continue;
-        collect(item.fields, blockQueryMetadata(item.block).fields, slots);
+        collect(item.fields, blockQueryMetadata(item.block).fields, slots, links);
       }
     } else if (
       (meta.kind === 'childOne' || meta.kind === 'childMany') &&
       !isUndefined(meta.subfields)
     ) {
       for (const item of isArray(held) ? held : [held]) {
-        if (isPlainObject(item)) collect(item, meta.subfields, slots);
+        if (isPlainObject(item)) collect(item, meta.subfields, slots, links);
       }
     }
   }
+}
+
+/**
+ * Sets each link's `href` to its target's path in `locale`, as the reader may read the target.
+ * A forged `href` never survives, since a draft skips the sanitizer that drops it.
+ * A link whose target is missing, hidden, or without a route or slug in `locale` keeps no `href`.
+ */
+async function resolveLinks(links: readonly RecordLink[], locale: string): Promise<void> {
+  for (const link of links) delete link.href;
+  const routes = routesIn(locale);
+  for (const [target, group = []] of Object.entries(groupBy(links, (link) => link.collection))) {
+    const route = routes.find((entry) => entry.collection === target);
+    if (isUndefined(route)) continue;
+    const paths = await readPaths(route, uniqueArray(group.map((link) => link.record)));
+    for (const link of group) {
+      const path = paths.get(link.record);
+      if (!isUndefined(path)) link.href = link.hash ? `${path}#${link.hash}` : path;
+    }
+  }
+}
+
+/**
+ * The site paths of the `ids` the reader may read under `route`, keyed by `UUID`.
+ * Only a route with a param reads `slug`, since a collection behind a static route may have none.
+ */
+async function readPaths(route: CMSRoute, ids: string[]): Promise<Map<string, string>> {
+  const dynamic = route.match.params.length > 0;
+  const records = await readScoped(
+    route.collection,
+    ids,
+    route.locale,
+    dynamic ? ['UUID', 'slug'] : ['UUID'],
+  );
+  const paths = new Map<string, string>();
+  for (const record of records) {
+    const slug = isString(record.slug) ? record.slug : undefined;
+    if (!dynamic || !isUndefined(slug)) paths.set(record.UUID as string, routePath(route, slug));
+  }
+  return paths;
 }
 
 /**
@@ -129,17 +183,28 @@ async function readPublicUploads(ids: string[]): Promise<QueryRecord[]> {
 
 /**
  * The `ids` of `target` the reader's own read access admits; none when the reader may not read it at all.
+ * A non-empty `fields` selects just those fields.
  */
-async function readScoped(target: string, ids: string[], locale: string): Promise<QueryRecord[]> {
-  let builder;
-  try {
-    builder = await queryScoped(target, 'read');
-  } catch (error) {
-    if (error instanceof HTTPError) return [];
-    throw error;
+async function readScoped(
+  target: string,
+  ids: string[],
+  locale: string,
+  fields: readonly string[] = [],
+): Promise<QueryRecord[]> {
+  const records: QueryRecord[] = [];
+  for (const batch of chunk(ids, 900)) {
+    let builder;
+    try {
+      builder = await queryScoped(target, 'read');
+    } catch (error) {
+      if (error instanceof HTTPError) return [];
+      throw error;
+    }
+    if (queryMetadata(target).translatable === true) builder.locale(locale);
+    if (fields.length > 0) builder.select(...fields);
+    records.push(...(await builder.where({ UUID: { in: batch } }).findMany()));
   }
-  if (queryMetadata(target).translatable === true) builder.locale(locale);
-  return builder.where({ UUID: { in: ids } }).findMany();
+  return records;
 }
 
 /**

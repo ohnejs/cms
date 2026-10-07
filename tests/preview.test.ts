@@ -153,6 +153,16 @@ describe('preview drafts', () => {
     strictEqual(response.status, 403);
   });
 
+  it('refuses a draft nested more than 64 levels deep', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const nested = (depth: number): unknown => (depth === 0 ? 'deep' : [nested(depth - 1)]);
+    const draft = (depth: number) =>
+      put(cookie, token, { record: about, values: { title: nested(depth) } });
+    strictEqual((await draft(60)).status, 200);
+    strictEqual((await draft(64)).status, 400);
+  });
+
   it('refuses to mint a token without a session', async () => {
     strictEqual((await mint('')).status, 401);
   });

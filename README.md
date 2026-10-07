@@ -29,7 +29,9 @@ export default defineConfig({
 });
 ```
 
-Your website reads its pages with [`@ohnejs/client`](https://github.com/ohnejs/client).
+Your website reads its pages with [`@ohnejs/client`](https://github.com/ohnejs/client). A link to a
+record, in a `richText` or `link` field, arrives with an `href` to that record's page whenever the
+reader can open it.
 
 ## Docs
 
