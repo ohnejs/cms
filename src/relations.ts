@@ -1,15 +1,7 @@
 import type { FieldQueryMeta, QueryRecord } from 'ohnejs';
 import type { RecordLink } from 'ohnejs/utils';
 
-import {
-  blockQueryMetadata,
-  HTTPError,
-  queryMetadata,
-  queryUntyped,
-  useEnv,
-  useEvent,
-} from 'ohnejs';
-import { queryScoped } from 'ohnejs/auth';
+import { blockQueryMetadata, queryMetadata, queryUntyped, useEnv, useEvent } from 'ohnejs';
 import {
   chunk,
   groupBy,
@@ -22,6 +14,7 @@ import {
 } from 'ohnejs/utils';
 
 import { type CMSRoute, routePath, routesIn } from './routes.ts';
+import { scopedRead } from './scoped-read.ts';
 
 /**
  * The stored fields of a loaded upload a site may see.
@@ -226,7 +219,7 @@ async function readPublicUploads(ids: string[], locale: string): Promise<QueryRe
 
 /**
  * The `ids` of `target` the reader's own read access admits; none when the reader may not read it at all.
- * A non-empty `fields` selects just those fields.
+ * A non-empty `fields` selects just those, within what the access shows.
  */
 async function readScoped(
   target: string,
@@ -236,15 +229,8 @@ async function readScoped(
 ): Promise<QueryRecord[]> {
   const records: QueryRecord[] = [];
   for (const batch of chunk(ids, 900)) {
-    let builder;
-    try {
-      builder = await queryScoped(target, 'read');
-    } catch (error) {
-      if (error instanceof HTTPError) return [];
-      throw error;
-    }
-    if (queryMetadata(target).translatable === true) builder.locale(locale);
-    if (fields.length > 0) builder.select(...fields);
+    const builder = await scopedRead(target, locale, fields);
+    if (isUndefined(builder)) return [];
     records.push(...(await builder.where({ UUID: { in: batch } }).findMany()));
   }
   return records;

@@ -1,8 +1,8 @@
-import { HTTPError, queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { queryScoped } from 'ohnejs/auth';
+import { queryUntyped, useConfig } from 'ohnejs';
 import { escapeXML, isPlainObject, isString } from 'ohnejs/utils';
 
 import { routePath, routesIn } from './routes.ts';
+import { scopedRead } from './scoped-read.ts';
 import { absolute } from './seo.ts';
 
 /**
@@ -70,14 +70,7 @@ async function collect(): Promise<Map<string, Entry>> {
  * Every record of `collection` the public may read in `locale`, or none when it may read nothing.
  */
 async function readAll(collection: string, locale: string) {
-  try {
-    const builder = await queryScoped(collection, 'read');
-    if (queryMetadata(collection).translatable === true) builder.locale(locale);
-    return await builder.findMany();
-  } catch (error) {
-    if (error instanceof HTTPError) return [];
-    throw error;
-  }
+  return (await scopedRead(collection, locale))?.findMany() ?? [];
 }
 
 /**

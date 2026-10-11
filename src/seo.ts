@@ -1,12 +1,12 @@
 import type { QueryRecord } from 'ohnejs';
 
-import { HTTPError, queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { queryScoped } from 'ohnejs/auth';
+import { queryMetadata, queryUntyped, useConfig } from 'ohnejs';
 import { isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
 import { useCMSConfig } from './config.ts';
 import { loadRelations } from './relations.ts';
 import { routePath, routesIn } from './routes.ts';
+import { scopedRead } from './scoped-read.ts';
 
 /**
  * What a page's `<head>` says about it.
@@ -102,17 +102,7 @@ async function readIn(
   uuid: string,
   locale: string,
 ): Promise<QueryRecord | undefined> {
-  try {
-    return await (
-      await queryScoped(collection, 'read')
-    )
-      .locale(locale)
-      .where({ UUID: uuid })
-      .findFirst();
-  } catch (error) {
-    if (error instanceof HTTPError) return undefined;
-    throw error;
-  }
+  return (await scopedRead(collection, locale))?.where({ UUID: uuid }).findFirst();
 }
 
 /**

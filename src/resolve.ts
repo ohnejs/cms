@@ -1,7 +1,6 @@
 import type { QueryRecord } from 'ohnejs';
 
-import { HTTPError, queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { queryScoped } from 'ohnejs/auth';
+import { queryMetadata, queryUntyped, useConfig } from 'ohnejs';
 import { decodeRouteParams, isNull, isString, isUndefined } from 'ohnejs/utils';
 
 import type { Draft } from './preview/drafts.ts';
@@ -9,6 +8,7 @@ import type { Draft } from './preview/drafts.ts';
 import { useCMSConfig } from './config.ts';
 import { loadRelations } from './relations.ts';
 import { type CMSRoute, isHome, routePath, routesIn, splitLocale } from './routes.ts';
+import { scopedRead } from './scoped-read.ts';
 import { type Alternate, alternatesOf, type SEO, seoOf } from './seo.ts';
 
 /**
@@ -116,7 +116,7 @@ async function readPage(
     const saved = await readTrusted(route, drafted.record, translatable);
     return { ...saved, ...drafted.values, UUID: drafted.record };
   }
-  const saved = await readScoped(route, slug, translatable);
+  const saved = await readScoped(route, slug);
   if (isUndefined(saved)) return undefined;
   const draft = own.find((entry) => entry.record === saved.UUID);
   return isUndefined(draft) ? saved : { ...saved, ...draft.values, UUID: saved.UUID };
@@ -124,20 +124,14 @@ async function readPage(
 
 /**
  * The saved record by `slug`, as the caller's read access admits it.
+ * The route's locale wins over the scope's, as a request's `locale` param does.
  */
 async function readScoped(
   route: CMSRoute,
   slug: string | undefined,
-  translatable: boolean,
 ): Promise<QueryRecord | undefined> {
-  let builder;
-  try {
-    builder = await queryScoped(route.collection, 'read');
-  } catch (error) {
-    if (error instanceof HTTPError) return undefined;
-    throw error;
-  }
-  if (translatable) builder.locale(route.locale);
+  const builder = await scopedRead(route.collection, route.locale);
+  if (isUndefined(builder)) return undefined;
   if (!isUndefined(slug)) builder.where({ slug });
   return builder.findFirst();
 }
