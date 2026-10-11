@@ -15,7 +15,6 @@ import {
 } from 'app/components/record-editor.ts';
 import { sidebarExpanded, toggleSidebar } from 'app/components/shell.ts';
 import {
-  attachTooltip,
   blockIcon,
   blocksHandleOf,
   blocksTree,
@@ -584,7 +583,12 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
    * The header's sidebar toggle: accent while the sidebar is open.
    */
   function menuButton(): HTMLElement {
-    const el = button(icon('menu-2'), { variant: 'outline', onClick: toggleSidebar });
+    const el = button(() => t('dashboard.header.toggleSidebar'), {
+      icon: 'menu-2',
+      iconOnly: true,
+      variant: 'outline',
+      onClick: toggleSidebar,
+    });
     effect(() => {
       el.classList.toggle('ohne-button-accent', sidebarExpanded());
       el.classList.toggle('ohne-button-outline', !sidebarExpanded());
@@ -597,7 +601,9 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
    * It waits for a saved record, a page to show, a readable draft, and the right to change the record.
    */
   function shareButton(): HTMLElement {
-    const el = button(icon('share'), {
+    const el = button(() => t('cms.liveView.share.title'), {
+      icon: 'share',
+      iconOnly: true,
       variant: 'outline',
       class: 'o-cms-lv-share',
       disabled: () =>
@@ -610,7 +616,6 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
         sharing.value = true;
       },
     });
-    onCleanup(attachTooltip(el, () => t('cms.liveView.share.title')));
     return el;
   }
 
@@ -640,12 +645,12 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
    * The active tree's "Add block" button, opening the block picker at the top level.
    */
   function addButton(): HTMLElement {
-    const el = button(icon('cube-plus'), {
+    return button(() => t('dashboard.blocks.addTopLevel'), {
+      icon: 'cube-plus',
+      iconOnly: true,
       variant: 'outline',
       onClick: () => tree()?.addTopLevel(),
     });
-    onCleanup(attachTooltip(el, () => t('dashboard.blocks.addTopLevel')));
-    return el;
   }
 
   /**

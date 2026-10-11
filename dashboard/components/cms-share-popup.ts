@@ -20,7 +20,6 @@ import {
   when,
 } from 'ohnejs/dashboard';
 import {
-  effect,
   formatDuration,
   formatLocaleCode,
   isUndefined,
@@ -250,14 +249,13 @@ export function sharePopup(options: SharePopupOptions): Popup {
     );
   };
 
-  const closeButton = button(icon('x'), {
+  const closeButton = button(() => t('dashboard.close'), {
+    icon: 'x',
+    iconOnly: true,
     size: -2,
     variant: 'ghost',
     class: 'ohne-ml-auto',
     onClick: () => options.onClose(handle.close),
-  });
-  effect(() => {
-    closeButton.title = t('dashboard.close');
   });
 
   const handle = popup(

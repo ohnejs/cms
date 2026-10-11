@@ -1,6 +1,6 @@
 import type { BlockAction, Child } from 'ohnejs/dashboard';
 
-import { api, attachTooltip, button, css, h, icon, useT, when } from 'ohnejs/dashboard';
+import { api, attachTooltip, button, css, h, useT, when } from 'ohnejs/dashboard';
 import { effect, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
 
 import { frameURL } from './cms-meta.ts';
@@ -359,8 +359,12 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
 
   iframe.addEventListener('mouseleave', () => post('highlight', { block: null }));
 
-  const reload = button(icon('refresh'), { variant: 'outline', onClick: load });
-  onCleanup(attachTooltip(reload, () => t('cms.liveView.reload')));
+  const reload = button(() => t('cms.liveView.reload'), {
+    icon: 'refresh',
+    iconOnly: true,
+    variant: 'outline',
+    onClick: load,
+  });
 
   const dimensions = h(
     'span',
