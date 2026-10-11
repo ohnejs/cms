@@ -47,7 +47,7 @@
     "typescript": "7.0.2"
   },
   "peerDependencies": {
-    "ohnejs": ">=0.0.2"
+    "ohnejs": ">=0.1.0 <0.2.0-0"
   },
   "engines": {
     "node": ">=26.0.0"
