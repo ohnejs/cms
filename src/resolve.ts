@@ -39,6 +39,8 @@ export type Resolved =
  * With `drafts`, an editor's unsaved state wins over the saved record.
  * A draft's slug finds its page, unless another saved record holds that slug.
  * The record's relations load one level deep, at the top and inside its blocks.
+ * The loaded records keep their own record relations as `UUID`s.
+ * Their uploads load too, at every depth, since an upload is a public file and never a scoped record.
  */
 export async function resolvePath(raw: string, drafts: readonly Draft[] = []): Promise<Resolved> {
   const url = new URL(raw, 'http://site');

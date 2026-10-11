@@ -55,7 +55,8 @@ interface Slot {
  * Public uploads load whatever the reader's role, since their files are public already; private ones never do.
  * A loaded upload carries only what a site renders it with, and its URLs become absolute.
  * A loaded record of a collection with pages carries its `path`, so a site links to it.
- * The loaded records keep their own relations as `UUID`s.
+ * The loaded records keep their own record relations as `UUID`s.
+ * Their uploads load too, at every depth, since an upload is a public file and never a scoped record.
  * A record link carries `href`, its target's path, when the reader can open that page.
  */
 export async function loadRelations(
@@ -76,6 +77,23 @@ export async function loadRelations(
   for (const [target, ids] of wanted) {
     loaded.set(target, await readTargets(target, [...ids], locale));
   }
+  swap(slots, loaded);
+  const nested: Slot[] = [];
+  for (const [target, records] of loaded) {
+    if (target === 'Uploads') continue;
+    const fields = queryMetadata(target).fields;
+    for (const record of records.values()) collect(record, fields, nested, []);
+  }
+  const uploads = nested.filter((slot) => slot.target === 'Uploads');
+  const ids = uniqueArray(uploads.flatMap((slot) => idsOf(slot.holder[slot.key])));
+  swap(uploads, new Map([['Uploads', await readTargets('Uploads', ids, locale)]]));
+  await resolveLinks(links, locale);
+}
+
+/**
+ * Replaces each slot's `UUID`s with the `loaded` records they name, dropping those the reader may not see.
+ */
+function swap(slots: readonly Slot[], loaded: ReadonlyMap<string, Map<string, QueryRecord>>): void {
   for (const { holder, key, target, many } of slots) {
     const records = loaded.get(target) ?? new Map<string, QueryRecord>();
     const value = holder[key];
@@ -83,7 +101,6 @@ export async function loadRelations(
       ? idsOf(value).flatMap((id) => records.get(id) ?? [])
       : (records.get(isString(value) ? value : '') ?? null);
   }
-  await resolveLinks(links, locale);
 }
 
 /**
@@ -194,13 +211,17 @@ async function readTargets(
  * The read selects what `decorateUpload` needs to build `url` and `variants` too.
  */
 async function readPublicUploads(ids: string[], locale: string): Promise<QueryRecord[]> {
-  const uploads = await queryUntyped('Uploads')
-    .locale(locale)
-    .select(...UPLOAD_FIELDS, 'kind', 'private', 'directory')
-    .where({ UUID: { in: ids }, kind: 'file', private: false })
-    .findMany();
   const shown = [...UPLOAD_FIELDS, 'url', 'variants'];
-  return uploads.map((upload) => absolutize(pick(upload, shown)));
+  const uploads: QueryRecord[] = [];
+  for (const batch of chunk(ids, 900)) {
+    const found = await queryUntyped('Uploads')
+      .locale(locale)
+      .select(...UPLOAD_FIELDS, 'kind', 'private', 'directory')
+      .where({ UUID: { in: batch }, kind: 'file', private: false })
+      .findMany();
+    uploads.push(...found.map((upload) => absolutize(pick(upload, shown))));
+  }
+  return uploads;
 }
 
 /**

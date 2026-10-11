@@ -41,7 +41,16 @@ export default defineCollection({
 });
 `,
   'collections/Authors.ts': `import { defineCollection, field } from 'ohnejs';
-export default defineCollection({ fields: { name: field('text') }, api: { read: 'public' } });
+export default defineCollection({
+  fields: {
+    name: field('text'),
+    avatar: field('image'),
+    profile: field('object', { fields: { photo: field('image') } }),
+    content: field('blocks', { allow: ['Hero'] }),
+    friend: field('record', { collection: 'Authors' }),
+  },
+  api: { read: 'public' },
+});
 `,
   'collections/Secrets.ts': `import { defineCollection, field } from 'ohnejs';
 export default defineCollection({ fields: { code: field('text') } });
@@ -93,7 +102,14 @@ describe('resolve', () => {
       name: 'albums',
       private: false,
     });
-    const author = await queryUntyped('Authors').createOrThrow({ name: 'Ada' });
+    const friend = await queryUntyped('Authors').createOrThrow({ name: 'Grace' });
+    const author = await queryUntyped('Authors').createOrThrow({
+      name: 'Ada',
+      avatar: photo,
+      profile: { photo: plain },
+      content: [{ block: 'Hero', fields: { heading: 'By Ada', photo, hidden } }],
+      friend: friend.UUID,
+    });
     const secret = await queryUntyped('Secrets').createOrThrow({ code: '42' });
     await queryUntyped('Pages').createOrThrow({
       ...published,
@@ -206,6 +222,16 @@ describe('resolve', () => {
     strictEqual(hero.fields.hidden, null);
     strictEqual(hero.fields.author.name, 'Ada');
     strictEqual(hero.fields.secret, null);
+  });
+
+  it("loads a related record's uploads at every depth and keeps its other relations as UUIDs", async () => {
+    const { body } = await app.get('/cms/routes/resolve?path=/about');
+    const author = body.record.content[0].fields.author;
+    match(author.avatar.url, /\/uploads\/photo\.png$/);
+    strictEqual(author.profile.photo.UUID, plain);
+    match(author.content[0].fields.photo.url, /\/uploads\/photo\.png$/);
+    strictEqual(author.content[0].fields.hidden, null);
+    strictEqual(typeof author.friend, 'string');
   });
 
   it('loads only the fields a site renders an upload with', async () => {
