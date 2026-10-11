@@ -29,6 +29,7 @@ import {
   resizer,
   tab,
   tabs,
+  translateMessage,
   useHotkeys,
   useT,
   when,
@@ -516,7 +517,7 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
                       const errors = errorCount(field.name);
                       return {
                         name: field.name,
-                        label: field.label,
+                        label: translateMessage(field.label),
                         bubble:
                           errors === 0
                             ? undefined
@@ -715,7 +716,9 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
         'div',
         { class: 'o-cms-lv-block-header' },
         icon(blockIcon(block)),
-        h('span', { class: 'ohne-truncate' }, block?.label ?? node.block),
+        h('span', { class: 'ohne-truncate' }, () =>
+          block ? translateMessage(block.label) : node.block,
+        ),
         close,
       ),
       h(
@@ -773,7 +776,8 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
    * The label of a block instance, as the tree shows it.
    */
   function blockLabel(node: BlockNode): string {
-    return dashboardMeta()?.blocks.find((entry) => entry.name === node.block)?.label ?? node.block;
+    const block = dashboardMeta()?.blocks.find((entry) => entry.name === node.block);
+    return block ? translateMessage(block.label) : node.block;
   }
 }
 
