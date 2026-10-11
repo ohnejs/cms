@@ -17,10 +17,27 @@ import {
   isPlainObject,
   isString,
   isUndefined,
+  pick,
   uniqueArray,
 } from 'ohnejs/utils';
 
 import { type CMSRoute, routePath, routesIn } from './routes.ts';
+
+/**
+ * The stored fields of a loaded upload a site may see.
+ * An allowlist, so a field an app adds to `Uploads` never reaches the site.
+ */
+const UPLOAD_FIELDS = [
+  'UUID',
+  'name',
+  'type',
+  'size',
+  'width',
+  'height',
+  'description',
+  'focalX',
+  'focalY',
+] as const;
 
 /**
  * Where one relation value sits: the object holding it and its key.
@@ -36,7 +53,7 @@ interface Slot {
  * Loads every relation of a page record one level deep, at the top and inside its blocks and composites.
  * A relation reads as its reader may read the target, so a draft or a hidden record stays out.
  * Public uploads load whatever the reader's role, since their files are public already; private ones never do.
- * Upload URLs become absolute, so a site on another origin can show them.
+ * A loaded upload carries only what a site renders it with, and its URLs become absolute.
  * A loaded record of a collection with pages carries its `path`, so a site links to it.
  * The loaded records keep their own relations as `UUID`s.
  * A record link carries `href`, its target's path, when the reader can open that page.
@@ -158,7 +175,9 @@ async function readTargets(
 ): Promise<Map<string, QueryRecord>> {
   if (ids.length === 0) return new Map();
   const records =
-    target === 'Uploads' ? await readPublicUploads(ids) : await readScoped(target, ids, locale);
+    target === 'Uploads'
+      ? await readPublicUploads(ids, locale)
+      : await readScoped(target, ids, locale);
   const route = routesIn(locale).find((entry) => entry.collection === target);
   if (!isUndefined(route)) {
     for (const record of records) {
@@ -171,14 +190,17 @@ async function readTargets(
 }
 
 /**
- * The public uploads among `ids`, with absolute URLs.
+ * The public files among `ids` in `locale`, with absolute URLs and only `UPLOAD_FIELDS`.
+ * The read selects what `decorateUpload` needs to build `url` and `variants` too.
  */
-async function readPublicUploads(ids: string[]): Promise<QueryRecord[]> {
+async function readPublicUploads(ids: string[], locale: string): Promise<QueryRecord[]> {
   const uploads = await queryUntyped('Uploads')
-    .where({ UUID: { in: ids }, private: false })
+    .locale(locale)
+    .select(...UPLOAD_FIELDS, 'kind', 'private', 'directory')
+    .where({ UUID: { in: ids }, kind: 'file', private: false })
     .findMany();
-  for (const upload of uploads) absolutize(upload);
-  return uploads;
+  const shown = [...UPLOAD_FIELDS, 'url', 'variants'];
+  return uploads.map((upload) => absolutize(pick(upload, shown)));
 }
 
 /**
@@ -208,15 +230,16 @@ async function readScoped(
 }
 
 /**
- * Prefixes the upload's root-relative URLs with the API origin.
+ * Prefixes the upload's root-relative URLs with the API origin, in place, and answers the upload.
  */
-function absolutize(upload: QueryRecord): void {
+function absolutize(upload: QueryRecord): QueryRecord {
   const origin = apiOrigin();
   if (isString(upload.url) && upload.url.startsWith('/')) upload.url = origin + upload.url;
-  if (!isPlainObject(upload.variants)) return;
+  if (!isPlainObject(upload.variants)) return upload;
   for (const [name, url] of Object.entries(upload.variants)) {
     if (isString(url) && url.startsWith('/')) upload.variants[name] = origin + url;
   }
+  return upload;
 }
 
 /**

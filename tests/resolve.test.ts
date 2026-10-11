@@ -9,6 +9,7 @@ const APP = {
 export default defineConfig({
   layers: ['@ohnejs/cms'],
   collections: { locales: ['en', 'de'], defaultLocale: 'en' },
+  uploads: { images: { url: 'https://images.example.com' } },
   cms: {
     routes: {
       Pages: '/[...slug]',
@@ -53,6 +54,7 @@ export default defineBlock({
     hidden: field('image'),
     author: field('record', { collection: 'Authors' }),
     secret: field('record', { collection: 'Secrets' }),
+    attachment: field('record', { collection: 'Uploads' }),
   },
 });
 `,
@@ -63,20 +65,34 @@ const published = { status: 'published' };
 describe('resolve', () => {
   let app: TestApp;
   let photo: string;
+  let plain: string;
 
   before(async () => {
     app = await startApp(APP);
-    const upload = (name: string, isPrivate: boolean) =>
+    const upload = (name: string, isPrivate: boolean, description?: string) =>
       queryUntyped('Uploads').createOrThrow({
         kind: 'file',
         directory: '',
         name,
         type: 'image/png',
         size: 1,
+        hash: 'deadbeef',
         private: isPrivate,
+        description,
       });
-    photo = (await upload('photo.png', false)).UUID as string;
+    photo = (await upload('photo.png', false, 'A photo')).UUID as string;
+    await queryUntyped('Uploads')
+      .locale('de')
+      .where({ UUID: photo })
+      .updateOrThrow({ description: 'Ein Foto' });
+    plain = (await upload('plain.png', false, 'Plain')).UUID as string;
     const hidden = (await upload('hidden.png', true)).UUID as string;
+    const folder = await queryUntyped('Uploads').createOrThrow({
+      kind: 'folder',
+      directory: '',
+      name: 'albums',
+      private: false,
+    });
     const author = await queryUntyped('Authors').createOrThrow({ name: 'Ada' });
     const secret = await queryUntyped('Secrets').createOrThrow({ code: '42' });
     await queryUntyped('Pages').createOrThrow({
@@ -86,9 +102,22 @@ describe('resolve', () => {
       content: [
         {
           block: 'Hero',
-          fields: { heading: 'Hi', photo, hidden, author: author.UUID, secret: secret.UUID },
+          fields: {
+            heading: 'Hi',
+            photo,
+            hidden,
+            author: author.UUID,
+            secret: secret.UUID,
+            attachment: folder.UUID,
+          },
         },
       ],
+    });
+    await queryUntyped('Pages').createOrThrow({
+      ...published,
+      title: 'Plain',
+      slug: 'plain',
+      content: [{ block: 'Hero', fields: { heading: 'Plain', photo: plain, hidden } }],
     });
     await queryUntyped('Pages').createOrThrow({
       ...published,
@@ -177,6 +206,42 @@ describe('resolve', () => {
     strictEqual(hero.fields.hidden, null);
     strictEqual(hero.fields.author.name, 'Ada');
     strictEqual(hero.fields.secret, null);
+  });
+
+  it('loads only the fields a site renders an upload with', async () => {
+    const { photo: loaded } = (await app.get('/cms/routes/resolve?path=/about')).body.record
+      .content[0].fields;
+    deepStrictEqual(Object.keys(loaded).sort(), [
+      'UUID',
+      'description',
+      'focalX',
+      'focalY',
+      'height',
+      'name',
+      'size',
+      'type',
+      'url',
+      'variants',
+      'width',
+    ]);
+    deepStrictEqual(Object.keys(loaded.variants), ['thumbnail']);
+    match(loaded.variants.thumbnail, /^https:\/\/images\.example\.com\//);
+  });
+
+  it("loads an upload's description in the page's locale", async () => {
+    const hero = async (path: string) =>
+      (await app.get(`/cms/routes/resolve?path=${path}`)).body.record.content[0].fields;
+    strictEqual((await hero('/about')).photo.description, 'A photo');
+    strictEqual((await hero('/de/about')).photo.description, 'Ein Foto');
+    const untranslated = (await hero('/de/plain')).photo;
+    strictEqual(untranslated.UUID, plain);
+    strictEqual(untranslated.description, null);
+    match(untranslated.url, /\/uploads\/plain\.png$/);
+  });
+
+  it('never loads a folder', async () => {
+    const { body } = await app.get('/cms/routes/resolve?path=/about');
+    strictEqual(body.record.content[0].fields.attachment, null);
   });
 
   it('answers 400 for a path that is not a site path', async () => {
