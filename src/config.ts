@@ -107,6 +107,18 @@ declare module 'ohnejs' {
          */
         default?: string;
       };
+
+      /**
+       * The file that holds the types your website imports, relative to your project.
+       * `ohne dev` keeps it current, and `ohne prepare` and `ohne cms types` write it.
+       * `ohne serve` never writes it.
+       *
+       * @example
+       * ```ts
+       * '../web/ohne.ts'
+       * ```
+       */
+      types?: string;
     };
   }
 
@@ -164,6 +176,11 @@ export interface ResolvedCMSConfig {
    * The lifetimes a shared preview link may have, and the one chosen first.
    */
   share: { durations: string[]; default: string };
+
+  /**
+   * The file that holds the website types, relative to the project; absent when unset.
+   */
+  types: string | undefined;
 }
 
 /**
@@ -176,7 +193,7 @@ export const CMS_DEFAULTS = {
   homeSlug: 'index',
   webhooks: [],
   share: { durations: ['1h', '1d', '7d', '30d'], default: '1d' },
-} satisfies Omit<ResolvedCMSConfig, 'site'>;
+} satisfies Omit<ResolvedCMSConfig, 'site' | 'types'>;
 
 /**
  * How the cms keys merge, keyed by their path under `Config.cms`.
@@ -201,6 +218,7 @@ export function useCMSConfig(): ResolvedCMSConfig {
     ...config,
     site: useEnv().get('SITE_URL') ?? config.site,
     share: { durations, default: share.default ?? durations[0]! },
+    types: config.types,
   };
 }
 
@@ -211,6 +229,7 @@ export function useCMSConfig(): ResolvedCMSConfig {
 export function validateCMSConfig(): void {
   const { site, routes, previewURL, webhooks, share } = useCMSConfig();
   validateShare(share);
+  cmsTypesPath();
   for (const hook of webhooks) {
     const url = URL.parse(hook.url);
     const local = url?.hostname === 'localhost' || url?.hostname === '127.0.0.1';
@@ -286,6 +305,21 @@ export function validateCMSConfig(): void {
       seen.set(shape, collection);
     }
   }
+}
+
+/**
+ * Returns `cms.types`, throwing an error block when it is set but not a file path.
+ * The layer codegen reads it here, since `ohne prepare` and `ohne dev` write the file without booting.
+ */
+export function cmsTypesPath(): string | undefined {
+  const { types } = useCMSConfig();
+  if (!isUndefined(types) && (!isString(types) || types.length === 0)) {
+    throw ohneError({
+      title: 'Invalid `cms.types` value',
+      body: ["It is a file path relative to your project, like `'../web/ohne.ts'`."],
+    });
+  }
+  return types;
 }
 
 /**

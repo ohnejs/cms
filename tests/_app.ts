@@ -27,10 +27,11 @@ export interface TestApp {
 }
 
 /**
- * Writes an app from `files`, relative paths to sources, stacking `@ohnejs/cms`, and serves its API.
+ * Writes an app from `files`, relative paths to sources, stacking `@ohnejs/cms`, into a fresh temp directory.
  * `ohne.config.ts` defaults to the layer alone.
+ * Returns the app's directory, which the caller removes.
  */
-export async function startApp(files: Record<string, string>): Promise<TestApp> {
+export function writeApp(files: Record<string, string>): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ohne-cms-')));
   const all = {
     'package.json': JSON.stringify({
@@ -49,7 +50,14 @@ export async function startApp(files: Record<string, string>): Promise<TestApp> 
   mkdirSync(join(dir, 'node_modules', '@ohnejs'), { recursive: true });
   symlinkSync(FRAMEWORK, join(dir, 'node_modules', 'ohnejs'), 'dir');
   symlinkSync(PACKAGE, join(dir, 'node_modules', '@ohnejs', 'cms'), 'dir');
+  return dir;
+}
 
+/**
+ * Writes an app from `files` as `writeApp` does, and serves its API.
+ */
+export async function startApp(files: Record<string, string>): Promise<TestApp> {
+  const dir = writeApp(files);
   useEnv().set('SILENT', true);
   useEnv().set('DATABASE', ':memory:');
   useEnv().set('PORT', 0);

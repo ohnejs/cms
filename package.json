@@ -13,6 +13,7 @@
     "api",
     "boot",
     "collections",
+    "commands",
     "dashboard",
     "fields",
     "messages",
@@ -40,6 +41,7 @@
     "typecheck": "tsc && tsc -p dashboard/tsconfig.json"
   },
   "devDependencies": {
+    "@ohnejs/client": "link:../ohne-client",
     "@types/node": "26.0.0",
     "ohnejs": "0.0.2",
     "oxfmt": "0.55.0",

@@ -20,7 +20,7 @@ import { scopedRead } from './scoped-read.ts';
  * The stored fields of a loaded upload a site may see.
  * An allowlist, so a field an app adds to `Uploads` never reaches the site.
  */
-const UPLOAD_FIELDS = [
+export const UPLOAD_FIELDS = [
   'UUID',
   'name',
   'type',
