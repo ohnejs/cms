@@ -163,7 +163,7 @@ async function heldElsewhere(
 
 /**
  * The saved state of a drafted record, whatever its publish state, since its editor previews it.
- * A record that was never saved reads as `{}`.
+ * A record that was never saved reads as its system fields alone.
  */
 async function readTrusted(
   route: CMSRoute,
@@ -172,5 +172,11 @@ async function readTrusted(
 ): Promise<QueryRecord> {
   const builder = queryUntyped(route.collection).where({ UUID: record });
   if (translatable) builder.locale(route.locale);
-  return (await builder.findFirst()) ?? {};
+  return (
+    (await builder.findFirst()) ?? {
+      UUID: record,
+      _updatedAt: Date.now(),
+      ...(translatable ? { _translations: [] } : {}),
+    }
+  );
 }

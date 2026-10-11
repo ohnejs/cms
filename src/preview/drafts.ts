@@ -11,7 +11,7 @@ import {
   useBlocks,
 } from 'ohnejs';
 import { queryScoped } from 'ohnejs/auth';
-import { isArray, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
+import { isArray, isPlainObject, isString, isUndefined, uuidv7 } from 'ohnejs/utils';
 
 import type { PreviewToken } from './tokens.ts';
 
@@ -109,6 +109,8 @@ export async function assertWritable(collection: string, record: string): Promis
 
 /**
  * The values with every unknown and unreadable field removed, descending into blocks and child tables.
+ * An item without a `UUID` gets one, so a preview item is keyed like a saved one.
+ * That `UUID` changes with each edit until the record saves.
  */
 function clean(
   values: Readonly<Record<string, unknown>>,
@@ -124,10 +126,15 @@ function clean(
       !isUndefined(meta.subfields)
     ) {
       const subfields = meta.subfields;
+      const row = (item: Readonly<Record<string, unknown>>): Record<string, unknown> => {
+        const cleaned = clean(item, subfields);
+        if (!isString(cleaned.UUID)) cleaned.UUID = uuidv7();
+        return cleaned;
+      };
       kept[key] = isArray(value)
-        ? value.map((item) => (isPlainObject(item) ? clean(item, subfields) : item))
+        ? value.map((item) => (isPlainObject(item) ? row(item) : item))
         : isPlainObject(value)
-          ? clean(value, subfields)
+          ? row(value)
           : value;
     } else kept[key] = value;
   }
@@ -136,6 +143,8 @@ function clean(
 
 /**
  * The block items of a draft, each item's fields cleaned by its own block's metadata.
+ * An item without a `UUID` gets one, so a preview item is keyed like a saved one.
+ * That `UUID` changes with each edit until the record saves.
  */
 function cleanBlocks(value: unknown): unknown[] {
   if (!isArray(value)) return [];
@@ -147,7 +156,7 @@ function cleanBlocks(value: unknown): unknown[] {
     return [
       {
         block: item.block,
-        UUID: isString(item.UUID) ? item.UUID : undefined,
+        UUID: isString(item.UUID) ? item.UUID : uuidv7(),
         fields: clean(fields, blockQueryMetadata(item.block).fields),
       },
     ];

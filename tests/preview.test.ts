@@ -6,7 +6,12 @@ import { startApp, type TestApp } from './_app.ts';
 
 const APP = {
   'ohne.config.ts': `import { defineConfig } from 'ohnejs';
-export default defineConfig({ layers: ['@ohnejs/cms'], cms: { routes: { Pages: '/[...slug]' } } });
+export default defineConfig({
+  layers: ['@ohnejs/cms'],
+  auth: { loginRateLimit: false },
+  collections: { locales: ['en', 'de'], defaultLocale: 'en' },
+  cms: { routes: { Posts: '/blog/[slug]', Pages: '/[...slug]' } },
+});
 `,
   'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
 import { pageFields, publishedScope } from '@ohnejs/cms';
@@ -20,10 +25,24 @@ export default defineCollection({
   api: { read: { public: true, access: publishedScope }, create: true, update: true },
 });
 `,
+  'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields, publishedScope } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { title: field('text', { translatable: true }), ...pageFields({ translatable: true }) },
+  api: { read: { public: true, access: publishedScope }, create: true, update: true },
+});
+`,
   'blocks/Hero.ts': `import { defineBlock, field } from 'ohnejs';
 export default defineBlock({
-  fields: { heading: field('text'), secret: field('text', { nullable: true, readable: false }) },
+  fields: {
+    heading: field('text'),
+    secret: field('text', { nullable: true, readable: false }),
+    columns: field('repeater', { fields: { body: field('blocks', { allow: ['Quote'] }) } }),
+  },
 });
+`,
+  'blocks/Quote.ts': `import { defineBlock, field } from 'ohnejs';
+export default defineBlock({ fields: { text: field('text') } });
 `,
 };
 
@@ -144,6 +163,63 @@ describe('preview drafts', () => {
     deepStrictEqual(body.record.content, [
       { block: 'Hero', UUID: 'b1', fields: { heading: 'Draft' } },
     ]);
+  });
+
+  it('keys every new block item and composite row of a draft with a UUID', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, {
+      record: about,
+      values: {
+        slug: 'about',
+        content: [
+          {
+            block: 'Hero',
+            fields: { columns: [{ body: [{ block: 'Quote', fields: { text: 'Hi' } }] }] },
+          },
+        ],
+      },
+    });
+    const [hero] = (await resolve('/about', token)).body.record.content;
+    strictEqual(typeof hero.UUID, 'string');
+    strictEqual(typeof hero.fields.columns[0].UUID, 'string');
+    strictEqual(typeof hero.fields.columns[0].body[0].UUID, 'string');
+  });
+
+  it('keeps the stored UUID of a saved composite row', async () => {
+    const saved = await queryUntyped('Pages').createOrThrow({
+      status: 'published',
+      title: 'Columns',
+      slug: 'columns',
+      content: [{ block: 'Hero', fields: { heading: 'Hi', columns: [{ body: [] }] } }],
+    });
+    const stored: any = await queryUntyped('Pages').where({ UUID: saved.UUID }).findFirst();
+    const row = stored.content[0].fields.columns[0];
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, {
+      record: saved.UUID,
+      values: { slug: 'columns', content: [{ block: 'Hero', fields: { columns: [row] } }] },
+    });
+    const [hero] = (await resolve('/columns', token)).body.record.content;
+    strictEqual(hero.fields.columns[0].UUID, row.UUID);
+  });
+
+  it('reads a never saved record as its system fields', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, { record: 'new-page', values: { title: 'New', slug: 'new' } });
+    await put(cookie, token, {
+      collection: 'Posts',
+      record: 'new-post',
+      values: { title: 'New', slug: 'new-post' },
+    });
+    const page = (await resolve('/new', token)).body.record;
+    strictEqual(typeof page._updatedAt, 'number');
+    strictEqual('_translations' in page, false);
+    const post = (await resolve('/blog/new-post', token)).body.record;
+    strictEqual(typeof post._updatedAt, 'number');
+    deepStrictEqual(post._translations, []);
   });
 
   it("refuses a draft under another session's token", async () => {
