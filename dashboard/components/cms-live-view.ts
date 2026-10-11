@@ -13,12 +13,13 @@ import {
   recordEditorHeading,
   useRecordEditor,
 } from 'app/components/record-editor.ts';
-import { sidebarExpanded, toggleSidebar, useWideShell } from 'app/components/shell.ts';
+import { sidebarExpanded, toggleSidebar } from 'app/components/shell.ts';
 import {
   attachTooltip,
   blockIcon,
   blocksHandleOf,
   blocksTree,
+  bubble,
   button,
   container,
   css,
@@ -27,9 +28,9 @@ import {
   icon,
   iconGroup,
   resizer,
-  tab,
   tabs,
   translateMessage,
+  useFrame,
   useHotkeys,
   useT,
   when,
@@ -328,7 +329,7 @@ css`
  * Loading, saving, history, and the leave guard are the record editor's own, through `useRecordEditor`.
  */
 export function liveView(collection: DashboardCollection, uuid: string | undefined): Child {
-  useWideShell();
+  useFrame({ wide: true });
   const t = useT();
   const editor = useRecordEditor(collection, uuid);
   const { form, state, busy } = editor;
@@ -510,25 +511,20 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
           blocksFields.length === 1
             ? h('div', { class: 'o-cms-lv-trees' }, trees.get(active.value)?.element)
             : tabs(
-                () => blocksFields.map((field) => tab(field.name, trees.get(field.name)?.element)),
-                {
-                  list: () =>
-                    blocksFields.map((field) => {
-                      const errors = errorCount(field.name);
-                      return {
-                        name: field.name,
-                        label: translateMessage(field.label),
-                        bubble:
-                          errors === 0
-                            ? undefined
-                            : { content: String(errors), variant: 'destructive' as const },
-                      };
-                    }),
-                  active: () => active.value,
-                  onChange: (name) => {
-                    active.value = name;
-                  },
-                },
+                () =>
+                  blocksFields.map((field) => {
+                    const errors = errorCount(field.name);
+                    return {
+                      name: field.name,
+                      label: field.label,
+                      bubble:
+                        errors === 0
+                          ? undefined
+                          : bubble(String(errors), { variant: 'destructive' }),
+                      content: () => trees.get(field.name)?.element,
+                    };
+                  }),
+                { active },
               ),
           h(
             'div',

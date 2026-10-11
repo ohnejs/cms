@@ -6,8 +6,7 @@ import {
   button,
   css,
   dashboardMeta,
-  field,
-  fieldLabel,
+  formField,
   formatDateTime,
   formatRelative,
   h,
@@ -179,8 +178,12 @@ export function sharePopup(options: SharePopupOptions): Popup {
   };
 
   const linkInput = (): HTMLElement => {
-    const copyButton = button(icon('clipboard'), { variant: 'outline', onClick: copy });
-    onCleanup(attachTooltip(copyButton, () => t('cms.liveView.share.copy')));
+    const copyButton = button(() => t('cms.liveView.share.copy'), {
+      icon: 'clipboard',
+      iconOnly: true,
+      variant: 'outline',
+      onClick: copy,
+    });
     const el = textInput(link, {
       id: LINK_ID,
       onFocus: (event) => (event.target as HTMLInputElement).select(),
@@ -188,21 +191,19 @@ export function sharePopup(options: SharePopupOptions): Popup {
     });
     const input = el.querySelector('input');
     if (input) input.readOnly = true;
-    return field([
-      fieldLabel(h('label', { for: LINK_ID }, () => t('cms.liveView.share.link'))),
-      el,
-    ]);
+    return formField(el, { label: () => t('cms.liveView.share.link') });
   };
 
   const row = (entry: ShareRow): HTMLElement => {
-    const revokeButton = button(icon('trash-x'), {
+    const revokeButton = button(() => t('cms.liveView.share.revoke'), {
+      icon: 'trash-x',
+      iconOnly: true,
       size: -2,
       variant: 'outline',
       destructiveHover: true,
       disabled: () => !isUndefined(revoking.value),
       onClick: () => void revoke(entry.UUID),
     });
-    onCleanup(attachTooltip(revokeButton, () => t('cms.liveView.share.revoke')));
     const expires = h(
       'span',
       { class: 'ohne-row' },
@@ -264,8 +265,7 @@ export function sharePopup(options: SharePopupOptions): Popup {
       'div',
       { class: 'o-cms-share' },
       h('p', { class: 'o-cms-share-intro ohne-muted' }, () => t('cms.liveView.share.intro')),
-      field([
-        fieldLabel(h('label', { for: DURATION_ID }, () => t('cms.liveView.share.expiresAfter'))),
+      formField(
         select(
           duration,
           () =>
@@ -278,7 +278,8 @@ export function sharePopup(options: SharePopupOptions): Popup {
             })),
           { id: DURATION_ID },
         ),
-      ]),
+        { label: () => t('cms.liveView.share.expiresAfter') },
+      ),
       h(
         'div',
         { class: 'o-cms-share-create ohne-row' },
