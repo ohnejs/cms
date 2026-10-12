@@ -86,10 +86,20 @@ export default defineCollection({
       seo: { noindex: true },
     });
     await queryUntyped('Pages').createOrThrow({ status: 'published', title: 'Lost', slug: '404' });
-    await queryUntyped('Redirects').createOrThrow({ from: '/old', to: '/about', code: '308' });
+    await queryUntyped('Redirects').createOrThrow({
+      from: '/old',
+      to: '/about',
+      code: '308',
+      forwardQuery: false,
+    });
     await queryUntyped('Redirects').createOrThrow({
       from: '/go',
       to: 'https://elsewhere.test/',
+      forwardQuery: true,
+    });
+    await queryUntyped('Redirects').createOrThrow({
+      from: '/moved',
+      to: '/about?tab=team#staff',
       forwardQuery: true,
     });
   });
@@ -124,8 +134,26 @@ export default defineCollection({
   });
 
   it('answers a redirect where no page does, forwarding the query when asked', async () => {
-    deepStrictEqual(await resolve('/old/'), { kind: 'redirect', to: '/about', code: 308 });
+    deepStrictEqual(await resolve('/old/?ref=x'), { kind: 'redirect', to: '/about', code: 308 });
     deepStrictEqual(await resolve('/go?ref=x'), {
+      kind: 'redirect',
+      to: 'https://elsewhere.test/?ref=x',
+      code: 301,
+    });
+    deepStrictEqual(await resolve('/moved?ref=x'), {
+      kind: 'redirect',
+      to: '/about?tab=team&ref=x#staff',
+      code: 301,
+    });
+  });
+
+  it('carries the preview token along a redirect within the site and never to another', async () => {
+    deepStrictEqual(await resolve('/moved?ohne-preview=t'), {
+      kind: 'redirect',
+      to: '/about?tab=team&ohne-preview=t#staff',
+      code: 301,
+    });
+    deepStrictEqual(await resolve('/go?ohne-preview=t&ref=x'), {
       kind: 'redirect',
       to: 'https://elsewhere.test/?ref=x',
       code: 301,

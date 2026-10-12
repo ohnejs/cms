@@ -82,8 +82,23 @@ async function redirectOf(url: URL): Promise<Resolved | undefined> {
   const from = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
   const row = await queryUntyped('Redirects').where({ from }).findFirst();
   if (isUndefined(row) || !isString(row.to)) return undefined;
-  const to = row.forwardQuery === true && url.search !== '' ? row.to + url.search : row.to;
+  const to = row.forwardQuery === true ? forward(row.to, url) : row.to;
   return { kind: 'redirect', to, code: Number(row.code) as 301 | 302 | 307 | 308 };
+}
+
+/**
+ * `to` with the request's query appended after its own, its hash kept last.
+ * The preview token goes along to a path of the site, so a preview follows a moved page.
+ * It never goes to another site, where a share token would land in logs and referers.
+ */
+function forward(to: string, url: URL): string {
+  if (url.search === '') return to;
+  const target = new URL(to, url);
+  const own = target.origin === url.origin;
+  for (const [key, value] of url.searchParams) {
+    if (own || key !== 'ohne-preview') target.searchParams.append(key, value);
+  }
+  return own ? target.pathname + target.search + target.hash : target.href;
 }
 
 /**

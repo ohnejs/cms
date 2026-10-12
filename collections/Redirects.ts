@@ -39,7 +39,8 @@ export default defineCollection({
       label: 'cms.redirects.code.label',
     }),
     forwardQuery: field('boolean', {
-      default: false,
+      display: 'buttons',
+      default: true,
       label: 'cms.redirects.forwardQuery.label',
       description: 'cms.redirects.forwardQuery.description',
     }),
