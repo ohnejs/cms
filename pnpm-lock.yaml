@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@ohnejs/client':
-        specifier: github:ohnejs/client#e60d42a
-        version: https://codeload.github.com/ohnejs/client/tar.gz/e60d42a4de4a13f3175691e709b7115c8e4432f5
+        specifier: 0.1.0
+        version: 0.1.0
       '@types/node':
         specifier: 26.0.0
         version: 26.0.0
@@ -29,9 +29,8 @@ importers:
 
 packages:
 
-  '@ohnejs/client@https://codeload.github.com/ohnejs/client/tar.gz/e60d42a4de4a13f3175691e709b7115c8e4432f5':
-    resolution: {gitHosted: true, integrity: sha512-RX07h+f5lJUG0o5VfimQ13sIecfr9QNq/rIlscvHdBFy+3T83XXefCGg6ExAKcueQrWtlW8rIzYsHKmfd/0lLw==, tarball: https://codeload.github.com/ohnejs/client/tar.gz/e60d42a4de4a13f3175691e709b7115c8e4432f5}
-    version: 0.0.1
+  '@ohnejs/client@0.1.0':
+    resolution: {integrity: sha512-mAL4PAPBXKOf/vpqHbEdYCH0s4/xPukIYrvBfdsMQH5idvje3Ocv3vHHZR4lM4d/m9+/CBJ8j6Xk1J2Fvzpv8A==}
     engines: {node: '>=20.0.0'}
 
   '@oxfmt/binding-android-arm-eabi@0.55.0':
@@ -446,7 +445,7 @@ packages:
 
 snapshots:
 
-  '@ohnejs/client@https://codeload.github.com/ohnejs/client/tar.gz/e60d42a4de4a13f3175691e709b7115c8e4432f5': {}
+  '@ohnejs/client@0.1.0': {}
 
   '@oxfmt/binding-android-arm-eabi@0.55.0':
     optional: true
