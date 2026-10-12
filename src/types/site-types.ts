@@ -3,6 +3,7 @@ import type {
   FieldInstance,
   ForeignKeyHint,
   JunctionHint,
+  QueryScope,
   ShapeMember,
 } from 'ohnejs';
 
@@ -10,18 +11,20 @@ import {
   collectBlocks,
   collectCollections,
   collectFieldTypes,
-  endpointOf,
   fieldJSONType,
+  ohneError,
   queryMetadata,
   readShapeType,
+  runWithoutEvent,
   stackedLayers,
   useConfig,
   useLayers,
   usePrinter,
   version,
 } from 'ohnejs';
+import { readScope } from 'ohnejs/auth';
 import { hasImageService, useUploadsConfig } from 'ohnejs/uploads';
-import { hashText, isUndefined, pick, relativePath, resolvePath, uniqueArray } from 'ohnejs/utils';
+import { errorMessage, hashText, isUndefined, pick, relativePath, uniqueArray } from 'ohnejs/utils';
 import {
   type CodeBuilder,
   createCodeBuilder,
@@ -91,7 +94,6 @@ interface Definition {
   name: string;
   file: string;
   fields: Record<string, FieldInstance>;
-  api?: Parameters<typeof endpointOf>[0];
 }
 
 /**
@@ -138,8 +140,10 @@ const PATH_DOC = jsdocBlock("The record's page path, when it has a page in this 
  * `CMS` describes everything a resolve returns; `Page`, `Block`, `Related` and `Upload` name its parts.
  * A page and its blocks carry each relation loaded one hop out: `Related[X]`, or `Upload` for a file.
  * A related record keeps its own relations as `UUID`s, its uploads aside.
- * A collection with pages an anonymous reader cannot read is left out, its blocks and targets with it.
- * A target an anonymous reader cannot read is `Record<string, unknown>`, so its shape never leaves the app.
+ * Each collection's read access is asked as a visitor without a session, exactly as a resolve asks it.
+ * A refused collection with pages is left out, its blocks and targets with it.
+ * A refused target is `Record<string, unknown>`.
+ * A scope's `select` narrows a shape to the named fields, `UUID`, `_updatedAt` and `_translations` included.
  * A `readable: false` field drops at every depth.
  * A field type whose JSON form is unknown reads `unknown`, and `degraded` names it.
  * `fresh` re-imports the app's definitions past the module cache, so a long-lived process reads its edits.
@@ -160,7 +164,7 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
   const definitions = new Map<string, Definition>(
     collections.map(({ name, file, collection }) => [
       name,
-      { subject: 'Collection', name, file, fields: collection.fields, api: collection.api },
+      { subject: 'Collection', name, file, fields: collection.fields },
     ]),
   );
   const blockDefinitions = new Map<string, Definition>(
@@ -170,30 +174,38 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
     ]),
   );
   const imports = createTypeImports(appDir(), DECLARED);
-  const walker = createWalker(types, [...blockDefinitions.keys()], imports, definitions);
+  const reach = await anonymousReach(definitions);
+  const walker = createWalker(types, [...blockDefinitions.keys()], imports, reach);
 
   const locales = [...useConfig().collections.locales].sort();
   const routes = locales.flatMap((locale) => routesIn(locale));
   const routed = uniqueArray(routes.map((route) => route.collection)).sort();
   const pages = new Map(
     routed
-      .filter((name) => isPublic(definitions.get(name)))
-      .map((name) => [
-        name,
-        [...systemMembers(name, 'page', false), ...walker.walk(definitions.get(name)!, 'page')],
-      ]),
+      .filter((name) => reach.has(name))
+      .map((name) => {
+        const { select } = reach.get(name)!;
+        return [
+          name,
+          [
+            ...systemMembers(name, 'page', false, select),
+            ...walker.walk(definitions.get(name)!, 'page', select),
+          ],
+        ];
+      }),
   );
   const pageBlocks = walker.walkBlocks('page', blockDefinitions);
   const related = new Map(
-    [...walker.targets]
-      .sort()
-      .map((name) => [
+    [...walker.targets].sort().map((name) => {
+      const { select } = reach.get(name)!;
+      return [
         name,
         [
-          ...systemMembers(name, 'related', routed.includes(name)),
-          ...walker.walk(definitions.get(name)!, 'related'),
+          ...systemMembers(name, 'related', routed.includes(name), select),
+          ...walker.walk(definitions.get(name)!, 'related', select),
         ],
-      ]),
+      ];
+    }),
   );
   const relatedBlocks = walker.walkBlocks('related', blockDefinitions);
   const uploads = definitions.get('Uploads');
@@ -254,18 +266,6 @@ export function reportDegraded(degraded: readonly DegradedType[]): void {
 }
 
 /**
- * Resolves `out`, a path relative to the app, as `cms.types` and `ohne cms types --out` spell it.
- *
- * @example
- * ```ts
- * siteTypesPath('../web/ohne.ts') // -> '/projects/web/ohne.ts'
- * ```
- */
-export function siteTypesPath(out: string): string {
-  return resolvePath(out, appDir());
-}
-
-/**
  * The app's own directory: the closest layer of the stack.
  */
 function appDir(): string {
@@ -273,13 +273,42 @@ function appDir(): string {
 }
 
 /**
- * Walks shapes at either depth, recording the blocks and public targets each walk reaches.
+ * Each collection a visitor without a session may read, mapped to the scope its read access answers.
+ * An access that throws without a request fails the whole file, naming the collection's file.
+ */
+async function anonymousReach(
+  definitions: ReadonlyMap<string, Definition>,
+): Promise<Map<string, QueryScope>> {
+  const reach = new Map<string, QueryScope>();
+  for (const { name, file } of definitions.values()) {
+    let scope: QueryScope | false;
+    try {
+      scope = await runWithoutEvent(() => readScope(name));
+    } catch (error) {
+      throw ohneError({
+        title: `Read access of \`${name}\` cannot answer for a visitor`,
+        body: [
+          errorMessage(error),
+          '',
+          'The site types ask each read access with no request bound, as a visitor without a session.',
+          'Answer without one, as `publishedScope` does: `useUser()` is `null` there and `tryUseEvent()` `undefined`.',
+        ],
+        path: file,
+      });
+    }
+    if (scope !== false) reach.set(name, scope);
+  }
+  return reach;
+}
+
+/**
+ * Walks shapes at either depth, recording the blocks and readable targets each walk reaches.
  */
 function createWalker(
   types: ReadonlyMap<string, EmittableFieldType>,
   blocks: readonly string[],
   imports: TypeImports,
-  collections: ReadonlyMap<string, Definition>,
+  reach: ReadonlyMap<string, QueryScope>,
 ) {
   const reached = { page: new Set<string>(), related: new Set<string>() };
   const targets = new Set<string>();
@@ -288,7 +317,7 @@ function createWalker(
   const targetType = (target: string, depth: Depth): string => {
     if (target === 'Uploads') return 'Upload';
     if (depth === 'related') return 'string';
-    if (!isPublic(collections.get(target))) return 'Record<string, unknown>';
+    if (!reach.has(target)) return 'Record<string, unknown>';
     targets.add(target);
     return `Related[${literalString(target)}]`;
   };
@@ -298,10 +327,10 @@ function createWalker(
     return hint.kind === 'junction' ? `${type}[]` : `${type} | null`;
   };
 
-  const walk = (definition: Definition, depth: Depth): ShapeMember[] =>
+  const walk = (definition: Definition, depth: Depth, select?: readonly string[]): ShapeMember[] =>
     readShapeType(
       { subject: `${definition.subject} \`${definition.name}\``, file: definition.file },
-      definition.fields,
+      isUndefined(select) ? definition.fields : pick(definition.fields, select),
       {
         types,
         blocks,
@@ -347,17 +376,15 @@ function createWalker(
 }
 
 /**
- * Whether an anonymous reader can read the collection `definition` describes.
- */
-function isPublic(definition: Definition | undefined): boolean {
-  return endpointOf(definition?.api, 'read')?.public === true;
-}
-
-/**
- * The members every record of `collection` carries besides its fields.
+ * The members every record of `collection` carries besides its fields, those outside `select` left out.
  * A related record of a collection with pages carries a `path` in a locale where it has one.
  */
-function systemMembers(collection: string, depth: Depth, routed: boolean): Member[] {
+function systemMembers(
+  collection: string,
+  depth: Depth,
+  routed: boolean,
+  select?: readonly string[],
+): Member[] {
   const members: Member[] = [
     { name: 'UUID', type: 'string', doc: UUID_DOC },
     { name: '_updatedAt', type: 'number', doc: UPDATED_AT_DOC },
@@ -370,8 +397,9 @@ function systemMembers(collection: string, depth: Depth, routed: boolean): Membe
       optional: depth === 'related',
     });
   }
-  if (routed) members.push({ name: 'path', type: 'string', doc: PATH_DOC, optional: true });
-  return members;
+  const selected = members.filter(({ name }) => isUndefined(select) || select.includes(name));
+  if (routed) selected.push({ name: 'path', type: 'string', doc: PATH_DOC, optional: true });
+  return selected;
 }
 
 /**

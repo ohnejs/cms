@@ -1,10 +1,10 @@
-import { usePrinter } from 'ohnejs';
+import { usePrinter, writeCodegenPath } from 'ohnejs';
 import { isUndefined, relativePath } from 'ohnejs/utils';
+import { codeSpan } from 'ohnejs/utils/ansi';
 import { defineCommand } from 'ohnejs/utils/cli';
-import { writeFileIfChanged } from 'ohnejs/utils/fs';
 
 import { cmsTypesPath } from '../src/config.ts';
-import { reportDegraded, siteTypes, siteTypesPath } from '../src/types/site-types.ts';
+import { reportDegraded, siteTypes } from '../src/types/site-types.ts';
 
 /**
  * The `ohne cms types` command: it writes the website types to `--out` or `cms.types`, else prints them.
@@ -25,10 +25,9 @@ const types = defineCommand({
       process.stdout.write(text);
       return;
     }
-    const path = siteTypesPath(out);
-    const shown = relativePath(process.cwd(), path);
-    const wrote = await writeFileIfChanged(path, text);
-    usePrinter().success(wrote ? `Wrote \`${shown}\`` : `\`${shown}\` is current`);
+    const { path, written } = await writeCodegenPath(out, text, { layer: '@ohnejs/cms' });
+    const shown = codeSpan(relativePath(process.cwd(), path));
+    usePrinter().success(written ? `Wrote ${shown}` : `${shown} is current`);
   },
 });
 

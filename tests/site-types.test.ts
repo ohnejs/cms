@@ -1,7 +1,7 @@
 import type * as client from '@ohnejs/client';
 import type * as utils from 'ohnejs/utils';
 
-import { deepStrictEqual, match, ok, strictEqual } from 'node:assert';
+import { deepStrictEqual, match, ok, rejects, strictEqual } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { usePrinter } from 'ohnejs';
+import { queryUntyped, usePrinter } from 'ohnejs';
 
 import { clientMirror, MIRRORED_TYPES } from '../src/types/mirror.ts';
 import { reportDegraded, siteTypes } from '../src/types/site-types.ts';
@@ -194,6 +194,71 @@ export async function render(path: string): Promise<string> {
 }
 `;
 
+const { FORCE_COLOR: _, ...uncolored } = process.env;
+
+/**
+ * Runs the `ohne` CLI with `args` in the app at `dir`, without color.
+ */
+function ohne(dir: string, ...args: string[]) {
+  return spawnSync(join(PACKAGE, 'node_modules', '.bin', 'ohne'), [...args, '--cwd', dir], {
+    encoding: 'utf8',
+    env: { ...uncolored, NO_COLOR: '1' },
+  });
+}
+
+/**
+ * The member names of the shape `owner` declares at `indent` in `text`.
+ */
+function members(text: string, owner: string, indent: number): string[] {
+  const pad = ' '.repeat(indent);
+  const shape = new RegExp(`^${pad}${owner}: \\{\\n([\\s\\S]*?)^${pad}\\};`, 'm');
+  const body = shape.exec(text)?.[1] ?? '';
+  return [...body.matchAll(new RegExp(`^${pad}  (\\w+)\\??:`, 'gm'))].map(([, name]) => name!);
+}
+
+/**
+ * Type-checks `consumer` against `types` as `ohne.ts`, with `@ohnejs/client` alone installed.
+ * Returns what `tsc` printed and its exit code, empty when it compiled.
+ */
+function compile(types: string, consumer: string): string {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ohne-site-')));
+  try {
+    writeFileSync(join(dir, 'ohne.ts'), types);
+    writeFileSync(join(dir, 'consumer.ts'), consumer);
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+    writeFileSync(
+      join(dir, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          module: 'nodenext',
+          target: 'esnext',
+          lib: ['esnext', 'dom'],
+          types: [],
+          noEmit: true,
+          allowImportingTsExtensions: true,
+          verbatimModuleSyntax: true,
+        },
+        include: ['*.ts'],
+      }),
+    );
+    mkdirSync(join(dir, 'node_modules', '@ohnejs'), { recursive: true });
+    symlinkSync(
+      realpathSync(join(PACKAGE, 'node_modules', '@ohnejs', 'client')),
+      join(dir, 'node_modules', '@ohnejs', 'client'),
+      'dir',
+    );
+    const { stdout, stderr, status } = spawnSync(
+      join(PACKAGE, 'node_modules', '.bin', 'tsc'),
+      ['-p', dir],
+      { encoding: 'utf8' },
+    );
+    return `${stdout}${stderr}${status === 0 ? '' : `exit ${status}`}`;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe('site types', () => {
   let app: TestApp;
 
@@ -282,41 +347,7 @@ describe('site types', () => {
   });
 
   it('compiles for a website, and rejects a misuse', async () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ohne-site-')));
-    try {
-      writeFileSync(join(dir, 'ohne.ts'), (await siteTypes()).text);
-      writeFileSync(join(dir, 'consumer.ts'), CONSUMER);
-      writeFileSync(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-      writeFileSync(
-        join(dir, 'tsconfig.json'),
-        JSON.stringify({
-          compilerOptions: {
-            strict: true,
-            module: 'nodenext',
-            target: 'esnext',
-            lib: ['esnext', 'dom'],
-            types: [],
-            noEmit: true,
-            allowImportingTsExtensions: true,
-            verbatimModuleSyntax: true,
-          },
-          include: ['*.ts'],
-        }),
-      );
-      mkdirSync(join(dir, 'node_modules', '@ohnejs'), { recursive: true });
-      symlinkSync(
-        realpathSync(join(PACKAGE, 'node_modules', '@ohnejs', 'client')),
-        join(dir, 'node_modules', '@ohnejs', 'client'),
-        'dir',
-      );
-      const tsc = spawnSync(join(PACKAGE, 'node_modules', '.bin', 'tsc'), ['-p', dir], {
-        encoding: 'utf8',
-      });
-      strictEqual(tsc.stdout + tsc.stderr, '');
-      strictEqual(tsc.status, 0);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    strictEqual(compile((await siteTypes()).text, CONSUMER), '');
   });
 
   it('reads the mirrored types from `@ohnejs/client` alone', () => {
@@ -420,6 +451,191 @@ export default defineField({
   });
 });
 
+const READ_ACCESS = {
+  'ohne.config.ts': `import { defineConfig } from 'ohnejs';
+export default defineConfig({
+  layers: ['@ohnejs/cms'],
+  cms: {
+    routes: {
+      Pages: '/[...slug]',
+      Guides: '/guides/[slug]',
+      Vault: '/vault/[slug]',
+      Members: '/members/[slug]',
+    },
+  },
+});
+`,
+  'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields, publishedScope } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields(), author: field('record', { collection: 'Authors' }) },
+  api: { read: { public: true, access: publishedScope } },
+});
+`,
+  'collections/Authors.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: { name: field('text'), email: field('text') },
+  api: { read: { public: true, access: () => ({ select: ['UUID', 'name'] }) } },
+});
+`,
+  'collections/Guides.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields() },
+  api: { read: { public: true, access: () => ({ select: ['UUID', 'title'] }) } },
+});
+`,
+  'collections/Vault.ts': `import { defineCollection, field } from 'ohnejs';
+import { useUser } from 'ohnejs/auth';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({
+  fields: {
+    ...pageFields(),
+    secretCode: field('text'),
+    content: field('blocks', { allow: ['Secret'] }),
+  },
+  api: { read: { public: true, access: async () => (await useUser()) !== null } },
+});
+`,
+  'collections/Members.ts': `import { defineCollection } from 'ohnejs';
+import { requireUser } from 'ohnejs/auth';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { ...pageFields() },
+  api: { read: { public: true, access: async () => Boolean(await requireUser()) } },
+});
+`,
+  'blocks/Secret.ts': `import { defineBlock, field } from 'ohnejs';
+export default defineBlock({ fields: { escalationPhone: field('text') } });
+`,
+};
+
+const AUTHOR_CONSUMER = `import type { Page } from './ohne.ts';
+
+export function byline(page: Page<'Pages'>): string {
+  return page.author?.name ?? '';
+}
+
+export function contact(page: Page<'Pages'>): string {
+  // @ts-expect-error - the read access selects no \`email\`
+  return page.author?.email ?? '';
+}
+`;
+
+describe('site types under read access', () => {
+  let app: TestApp;
+  let base: string;
+
+  before(async () => {
+    app = await startApp(READ_ACCESS);
+    base = `http://127.0.0.1:${app.port}`;
+    await queryUntyped('Users').createOrThrow({
+      email: 'ada@example.com',
+      password: 'Correct-Horse-42',
+      roles: ['admin'],
+    });
+  });
+
+  after(async () => {
+    await app.stop();
+  });
+
+  it('asks as a visitor without a session, even when a signed-in user fetches first', async () => {
+    const login = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'ada@example.com', password: 'Correct-Horse-42' }),
+    });
+    strictEqual(login.status, 200);
+    const cookie = login.headers
+      .getSetCookie()
+      .map((line) => line.split(';')[0])
+      .join('; ');
+    const text = await (await fetch(`${base}/cms/types.ts`, { headers: { cookie } })).text();
+    match(text, /^ {4}Guides: \{/m);
+    ok(!text.includes('Vault'));
+    ok(!text.includes('secretCode'));
+  });
+
+  it('narrows a related record to the fields its access selects', async () => {
+    const text = await (await fetch(`${base}/cms/types.ts`)).text();
+    deepStrictEqual(members(text, 'Authors', 2), ['UUID', 'name']);
+    ok(!text.includes('email'));
+  });
+
+  it('narrows a page to the fields its access selects', async () => {
+    const { text } = await siteTypes();
+    deepStrictEqual(members(text, 'Guides', 4), ['UUID', 'title']);
+  });
+
+  it('keeps every field of an unnarrowed page', async () => {
+    const { text } = await siteTypes();
+    const page = members(text, 'Pages', 4);
+    ok(page.includes('status'));
+    ok(page.includes('_updatedAt'));
+    match(text, /author: Related\['Authors'\] \| null;/);
+  });
+
+  it('leaves out what a visitor without a session is refused', async () => {
+    const { text } = await siteTypes();
+    for (const hidden of ['Vault', 'Members', 'Secret', 'escalationPhone']) {
+      ok(!text.includes(hidden), hidden);
+    }
+  });
+
+  it('rejects reading a field the access does not select', async () => {
+    strictEqual(compile((await siteTypes()).text, AUTHOR_CONSUMER), '');
+  });
+
+  it('gives the same bytes from `ohne prepare`, `ohne cms types` and the route', async () => {
+    const served = await (await fetch(`${base}/cms/types.ts`)).text();
+    const dir = writeApp({
+      ...READ_ACCESS,
+      'ohne.config.ts': READ_ACCESS['ohne.config.ts'].replace(
+        '  cms: {',
+        "  cms: {\n    types: 'web/prepared.ts',",
+      ),
+    });
+    try {
+      strictEqual(ohne(dir, 'prepare').status, 0);
+      strictEqual(ohne(dir, 'cms', 'types', '--out', 'web/command.ts').status, 0);
+      strictEqual(readFileSync(join(dir, 'web', 'prepared.ts'), 'utf8'), served);
+      strictEqual(readFileSync(join(dir, 'web', 'command.ts'), 'utf8'), served);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('site types beside an access that needs a request', () => {
+  let app: TestApp;
+
+  before(async () => {
+    app = await startApp({
+      ...PLAIN,
+      'collections/Blocked.ts': `import { defineCollection, field, useEvent } from 'ohnejs';
+export default defineCollection({
+  fields: { name: field('text') },
+  api: { read: { public: true, access: () => useEvent().ip === '' } },
+});
+`,
+    });
+  });
+
+  after(async () => {
+    await app.stop();
+  });
+
+  it('fails naming the collection and its file', async () => {
+    await rejects(siteTypes(), (error: { title?: string; path?: string }) => {
+      strictEqual(error.title, 'Read access of `Blocked` cannot answer for a visitor');
+      match(error.path ?? '', /[\\/]collections[\\/]Blocked\.ts$/);
+      return true;
+    });
+    strictEqual((await fetch(`http://127.0.0.1:${app.port}/cms/types.ts`)).status, 500);
+  });
+});
+
 describe('`cms.types`', () => {
   const out = join(realpathSync(mkdtempSync(join(tmpdir(), 'ohne-types-'))), 'web', 'ohne.ts');
   const files = {
@@ -441,12 +657,6 @@ export default defineConfig({
     ok(!existsSync(out));
   });
 
-  const { FORCE_COLOR: _, ...plain } = process.env;
-  const ohne = (dir: string, ...args: string[]) =>
-    spawnSync(join(PACKAGE, 'node_modules', '.bin', 'ohne'), [...args, '--cwd', dir], {
-      encoding: 'utf8',
-      env: { ...plain, NO_COLOR: '1' },
-    });
   const prepare = (dir: string) => ohne(dir, 'prepare');
 
   it('is written by `ohne prepare`, and left alone while current', async () => {
@@ -478,6 +688,42 @@ export default defineConfig({
         strictEqual(status, 1);
         match(stderr + stdout, /Invalid `?cms\.types`? value/);
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a path inside `.ohne` from `ohne cms types` exactly as `ohne prepare` does', () => {
+    const dir = writeApp({
+      ...files,
+      'ohne.config.ts': files['ohne.config.ts'].replace(JSON.stringify(out), "'.ohne/ohne.ts'"),
+    });
+    const block = (args: string[]) => {
+      const { status, stderr, stdout } = ohne(dir, ...args);
+      strictEqual(status, 1);
+      const output = stderr + stdout;
+      return output.slice(output.indexOf('Codegen path'));
+    };
+    try {
+      const prepared = block(['prepare']);
+      match(prepared, /^Codegen path \.ohne\/ohne\.ts is inside the codegen directory/);
+      strictEqual(block(['cms', 'types']), prepared);
+      strictEqual(block(['cms', 'types', '--out', '.ohne/ohne.ts']), prepared);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the file when `--out` is a directory', () => {
+    const dir = writeApp({ ...PLAIN, 'web/ohne.ts/.keep': '' });
+    try {
+      const { status, stderr, stdout } = ohne(dir, 'cms', 'types', '--out', 'web/ohne.ts');
+      const output = stderr + stdout;
+      strictEqual(status, 1);
+      strictEqual(output.split('Cannot write codegen file').length, 2);
+      match(output, /Cannot write codegen file \S*web\/ohne\.ts\n/);
+      match(output, /a directory sits at that path\./);
+      ok(!output.includes('EISDIR'));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
