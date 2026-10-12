@@ -1,12 +1,17 @@
-import { queryMetadata, queryUntyped } from 'ohnejs';
-import { readScope } from 'ohnejs/auth';
+import type { QueryScope } from 'ohnejs';
+
+import { HTTPError, queryMetadata, queryUntyped } from 'ohnejs';
+import { readReach } from 'ohnejs/auth';
 import { intersection, isUndefined } from 'ohnejs/utils';
 
 /**
  * A read of `collection` as the reader's read access admits it, or `undefined` when the reader may read none.
+ * Its reach is the read's own: the read's middleware run once per request, and one that answers reads none.
+ * An `HTTPError` the middleware or access throws reads none too, as the read itself would refuse the reader.
  * The access's `where` and `select` carry; its `limit` and `locale` do not, as a populate composes them.
  * A translatable collection reads in `locale`, as a request's `locale` param wins over the access's.
  * A non-empty `fields` narrows the select, yet never past the fields the access shows.
+ * Valid only within a request.
  *
  * @example
  * ```ts
@@ -19,7 +24,7 @@ export async function scopedRead(
   locale: string,
   fields: readonly string[] = [],
 ): Promise<ReturnType<typeof queryUntyped> | undefined> {
-  const scope = await readScope(collection);
+  const scope = await reach(collection);
   if (scope === false) return undefined;
   const builder = queryUntyped(collection);
   if (!isUndefined(scope.where)) builder.access(scope.where);
@@ -27,6 +32,19 @@ export async function scopedRead(
   if (select.length > 0) builder.select(...select);
   if (queryMetadata(collection).translatable === true) builder.locale(locale);
   return builder;
+}
+
+/**
+ * The reader's read reach into `collection`, where a thrown `HTTPError` reaches nothing.
+ * Any other throw propagates, so a misconfigured access stays a `500`.
+ */
+async function reach(collection: string): Promise<QueryScope | false> {
+  try {
+    return await readReach(collection);
+  } catch (error) {
+    if (error instanceof HTTPError) return false;
+    throw error;
+  }
 }
 
 /**

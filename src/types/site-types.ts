@@ -1,4 +1,5 @@
 import type {
+  CollectedCollection,
   EmittableFieldType,
   FieldInstance,
   ForeignKeyHint,
@@ -11,6 +12,7 @@ import {
   collectBlocks,
   collectCollections,
   collectFieldTypes,
+  endpointOf,
   fieldJSONType,
   ohneError,
   queryMetadata,
@@ -67,7 +69,22 @@ export interface DegradedType {
 }
 
 /**
- * The website types file and the field types it could not describe.
+ * A collection the site types left out because its read runs middleware.
+ */
+export interface GuardedCollection {
+  /**
+   * The collection's name.
+   */
+  name: string;
+
+  /**
+   * The file that defines the collection.
+   */
+  file: string;
+}
+
+/**
+ * The website types file, the field types it could not describe, and the collections it left out.
  */
 export interface SiteTypes {
   /**
@@ -79,6 +96,11 @@ export interface SiteTypes {
    * The field types whose fields read `unknown` in `text`, by name.
    */
   degraded: DegradedType[];
+
+  /**
+   * The collections left out of `text` because their read runs middleware, by name.
+   */
+  guarded: GuardedCollection[];
 }
 
 /**
@@ -142,6 +164,7 @@ const PATH_DOC = jsdocBlock("The record's page path, when it has a page in this 
  * A related record keeps its own relations as `UUID`s, its uploads aside.
  * Each collection's read access is asked as a visitor without a session, exactly as a resolve asks it.
  * A refused collection with pages is left out, its blocks and targets with it.
+ * So is one whose read runs middleware, which cannot run without a request, and `guarded` names it.
  * A refused target is `Record<string, unknown>`.
  * A scope's `select` narrows a shape to the named fields, `UUID`, `_updatedAt` and `_translations` included.
  * A `readable: false` field drops at every depth.
@@ -150,8 +173,9 @@ const PATH_DOC = jsdocBlock("The record's page path, when it has a page in this 
  *
  * @example
  * ```ts
- * const { text, degraded } = await siteTypes()
+ * const { text, degraded, guarded } = await siteTypes()
  * reportDegraded(degraded)
+ * reportGuarded(guarded)
  * ```
  */
 export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Promise<SiteTypes> {
@@ -174,7 +198,7 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
     ]),
   );
   const imports = createTypeImports(appDir(), DECLARED);
-  const reach = await anonymousReach(definitions);
+  const { reach, guarded } = await anonymousReach(collections);
   const walker = createWalker(types, [...blockDefinitions.keys()], imports, reach);
 
   const locales = [...useConfig().collections.locales].sort();
@@ -238,6 +262,7 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
   return {
     text: `${banner.join('\n')}\n${body}`,
     degraded: [...walker.degraded.values()].sort((a, b) => a.type.localeCompare(b.type)),
+    guarded,
   };
 }
 
@@ -266,6 +291,22 @@ export function reportDegraded(degraded: readonly DegradedType[]): void {
 }
 
 /**
+ * Prints one warning per collection the site types left out because its read runs middleware.
+ */
+export function reportGuarded(guarded: readonly GuardedCollection[]): void {
+  for (const { name, file } of guarded) {
+    usePrinter().warnBlock({
+      title: `Site types leave out \`${name}\``,
+      body: [
+        'Its read runs middleware, which the site types cannot run without a request.',
+        "To type it, move the check into the read's access, which the site types ask as a visitor.",
+      ].join('\n'),
+      path: relativePath(process.cwd(), file),
+    });
+  }
+}
+
+/**
  * The app's own directory: the closest layer of the stack.
  */
 function appDir(): string {
@@ -274,13 +315,15 @@ function appDir(): string {
 
 /**
  * Each collection a visitor without a session may read, mapped to the scope its read access answers.
+ * One whose read runs middleware is `guarded` instead, as only a request can run them.
  * An access that throws without a request fails the whole file, naming the collection's file.
  */
 async function anonymousReach(
-  definitions: ReadonlyMap<string, Definition>,
-): Promise<Map<string, QueryScope>> {
+  collections: readonly CollectedCollection[],
+): Promise<{ reach: Map<string, QueryScope>; guarded: GuardedCollection[] }> {
   const reach = new Map<string, QueryScope>();
-  for (const { name, file } of definitions.values()) {
+  const guarded: GuardedCollection[] = [];
+  for (const { name, file, collection } of collections) {
     let scope: QueryScope | false;
     try {
       scope = await runWithoutEvent(() => readScope(name));
@@ -296,9 +339,12 @@ async function anonymousReach(
         path: file,
       });
     }
-    if (scope !== false) reach.set(name, scope);
+    if (scope === false) continue;
+    const { middleware = [] } = endpointOf(collection.api, 'read') ?? {};
+    if (middleware.length > 0) guarded.push({ name, file });
+    else reach.set(name, scope);
   }
-  return reach;
+  return { reach, guarded: guarded.sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
 /**

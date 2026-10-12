@@ -4,7 +4,7 @@ import { codeSpan } from 'ohnejs/utils/ansi';
 import { defineCommand } from 'ohnejs/utils/cli';
 
 import { cmsTypesPath } from '../src/config.ts';
-import { reportDegraded, siteTypes } from '../src/types/site-types.ts';
+import { reportDegraded, reportGuarded, siteTypes } from '../src/types/site-types.ts';
 
 /**
  * The `ohne cms types` command: it writes the website types to `--out` or `cms.types`, else prints them.
@@ -19,8 +19,9 @@ const types = defineCommand({
   },
   async run({ values }) {
     const out = values.out ?? cmsTypesPath();
-    const { text, degraded } = await siteTypes();
+    const { text, degraded, guarded } = await siteTypes();
     reportDegraded(degraded);
+    reportGuarded(guarded);
     if (isUndefined(out)) {
       process.stdout.write(text);
       return;
