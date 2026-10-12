@@ -13,6 +13,7 @@ import {
   recordEditorHeading,
   useRecordEditor,
 } from 'app/components/record-editor.ts';
+import { recordNotices } from 'app/components/record-view.ts';
 import { sidebarExpanded, toggleSidebar } from 'app/components/shell.ts';
 import {
   blockIcon,
@@ -743,9 +744,12 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
     return container(
       h('div', { inert: () => !isUndefined(selected()) }, () => {
         if (state.value !== 'ready') return null;
-        return h('fieldset', { class: 'o-cms-lv-fields', disabled: () => busy.value }, () =>
-          form.value?.render({ hide: (field) => field.type === 'blocks' }),
-        );
+        return [
+          recordNotices(editor),
+          h('fieldset', { class: 'o-cms-lv-fields', disabled: () => busy.value }, () =>
+            form.value?.render({ hide: (field) => field.type === 'blocks' }),
+          ),
+        ];
       }),
     );
   }

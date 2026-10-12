@@ -73,7 +73,8 @@
       "framing": "Let this dashboard frame the website.",
       "origin": "Check that the site URL in your cms settings matches the website.",
       "title": "The website did not answer"
-    }
+    },
+    "replacesRedirect": "This page replaces the redirect from `{from}` to `{to}` while it's live."
   },
   "preview": {
     "invalidDraft": "A draft needs a routed `collection`, a `record`, a `locale`, and its `values`",
@@ -104,12 +105,16 @@
     "noindex": {
       "label": "Hide the site from search engines",
       "description": "Every page asks search engines to stay away, and robots.txt closes the site."
+    },
+    "autoRedirect": {
+      "label": "Redirect moved pages",
+      "description": "When a live page's slug changes, its old address sends visitors to the new one."
     }
   },
   "redirects": {
     "from": {
       "label": "From",
-      "description": "The path a visitor asks for, like /old-page."
+      "description": "The path a visitor asks for, like /old-page. A live page at this path answers instead."
     },
     "to": {
       "label": "To",
@@ -125,6 +130,7 @@
     "forwardQuery": {
       "label": "Keep the query",
       "description": "Carries ?query parameters over to the target."
-    }
+    },
+    "inactive": "Inactive while a live page answers at `{from}`."
   }
 }

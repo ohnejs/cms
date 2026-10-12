@@ -4,6 +4,7 @@ import { defineCollection, field } from 'ohnejs';
 
 /**
  * The website's own settings: its name, how page titles read, and what a page without its own SEO shows.
+ * `autoRedirect` keeps a live page's old address working when its slug changes.
  */
 export default defineCollection({
   singleton: true,
@@ -28,6 +29,12 @@ export default defineCollection({
       display: 'switch',
       label: 'cms.site.noindex.label',
       description: 'cms.site.noindex.description',
+    }),
+    autoRedirect: field('boolean', {
+      default: true,
+      display: 'switch',
+      label: 'cms.site.autoRedirect.label',
+      description: 'cms.site.autoRedirect.description',
     }),
   },
 });

@@ -31,10 +31,10 @@ export type Resolved =
 /**
  * Resolves a site path to the record a route pattern matches, read as the caller may read it.
  *
- * A redirect whose `from` is the path wins over every page.
  * The path's locale prefix picks the locale; the most specific pattern that finds a record wins.
  * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`, and that slug's own path redirects to `/`.
- * A path no page answers carries the page with the slug `404`, when there is one.
+ * A redirect whose `from` is the path answers only when no page does, so a live page shadows it.
+ * A path nothing answers carries the page with the slug `404`, when there is one.
  * A path whose locale prefix is ruled out carries the default locale's.
  * With `drafts`, an editor's unsaved state wins over the saved record.
  * A draft's slug finds its page, unless another saved record holds that slug.
@@ -44,10 +44,10 @@ export type Resolved =
  */
 export async function resolvePath(raw: string, drafts: readonly Draft[] = []): Promise<Resolved> {
   const url = new URL(raw, 'http://site');
-  const redirect = await redirectOf(url);
-  if (!isUndefined(redirect)) return redirect;
   const split = splitLocale(url.pathname);
-  if (isUndefined(split)) return missIn(useConfig().collections.defaultLocale, drafts);
+  if (isUndefined(split)) {
+    return (await redirectOf(url)) ?? (await missIn(useConfig().collections.defaultLocale, drafts));
+  }
   const { homeSlug } = useCMSConfig();
   const home = split.path === '/' || split.path === '';
   for (const route of routesIn(split.locale)) {
@@ -71,7 +71,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
       alternates: await alternatesOf(route.collection, record, route.locale),
     };
   }
-  return missIn(split.locale, drafts);
+  return (await redirectOf(url)) ?? (await missIn(split.locale, drafts));
 }
 
 /**

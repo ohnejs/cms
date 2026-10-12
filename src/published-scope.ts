@@ -1,7 +1,7 @@
 import type { AccessScope } from 'ohnejs';
 
 import { useUser, userCan } from 'ohnejs/auth';
-import { isNull } from 'ohnejs/utils';
+import { hasKey, isNull, isNumber } from 'ohnejs/utils';
 
 /**
  * The read access of a collection with pages: published records, inside their publish window.
@@ -28,4 +28,25 @@ export async function publishedScope(): Promise<
       ],
     },
   };
+}
+
+/**
+ * Whether a visitor sees `record` at `now` under `publishedScope`, which this rule mirrors.
+ * A record without a `status` counts as live, since its collection does not publish.
+ *
+ * @example
+ * ```ts
+ * isLive({ status: 'published', publishedAt: null }) // -> true
+ * isLive({ status: 'draft' })                        // -> false
+ * isLive({ title: 'Notes' })                         // -> true
+ * ```
+ */
+export function isLive(record: Readonly<Record<string, unknown>>, now = Date.now()): boolean {
+  if (!hasKey(record, 'status')) return true;
+  const { status, publishedAt, expiresAt } = record;
+  return (
+    status === 'published' &&
+    !(isNumber(publishedAt) && publishedAt > now) &&
+    !(isNumber(expiresAt) && expiresAt <= now)
+  );
 }

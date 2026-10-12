@@ -123,7 +123,7 @@ export default defineCollection({
     }
   });
 
-  it('answers a redirect before any page, forwarding the query when asked', async () => {
+  it('answers a redirect where no page does, forwarding the query when asked', async () => {
     deepStrictEqual(await resolve('/old/'), { kind: 'redirect', to: '/about', code: 308 });
     deepStrictEqual(await resolve('/go?ref=x'), {
       kind: 'redirect',
@@ -194,5 +194,23 @@ export default defineCollection({
       .update(`${t}.${delivery?.body}`)
       .digest('base64url');
     strictEqual(v1, expected);
+  });
+  it("announces the redirect a page's move leaves behind", async () => {
+    await queryUntyped('Pages').where({ slug: 'hidden' }).updateOrThrow({ slug: 'unseen' });
+    const rows = await queryUntyped('Redirects')
+      .where({ to: { endsWith: '/unseen' } })
+      .findMany();
+    const announced = () => {
+      const created = received
+        .map((entry) => JSON.parse(entry.body))
+        .filter((body) => body.collection === 'Redirects' && body.event === 'create')
+        .flatMap((body) => body.uuids);
+      return rows.every((row) => created.includes(row.UUID));
+    };
+    for (let attempt = 0; attempt < 50 && !announced(); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    strictEqual(rows.length, 2);
+    strictEqual(announced(), true);
   });
 });

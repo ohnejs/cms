@@ -18,6 +18,7 @@
     "fields",
     "messages",
     "middleware",
+    "migrations",
     "preview",
     "src",
     "ohne.config.ts",

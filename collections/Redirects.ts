@@ -1,7 +1,8 @@
 import { defineCollection, field } from 'ohnejs';
 
 /**
- * Paths that send a visitor elsewhere, checked before any page.
+ * Paths that send a visitor elsewhere, checked when no page answers.
+ * A live page whose slug changes leaves one behind from its old path, unless `Site.autoRedirect` is off.
  */
 export default defineCollection({
   api: { read: true, create: true, update: true, delete: true },
@@ -19,6 +20,7 @@ export default defineCollection({
       validators: [(value) => (value.startsWith('/') ? undefined : 'cms.validation.path')],
     }),
     to: field('text', {
+      index: true,
       label: 'cms.redirects.to.label',
       description: 'cms.redirects.to.description',
       validators: [
