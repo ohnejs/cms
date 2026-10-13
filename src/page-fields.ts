@@ -58,6 +58,7 @@ export function pageFields(options: PageFieldsOptions = {}) {
     }),
     seo: field('object', {
       translatable,
+      nullable: true,
       label: 'cms.fields.seo.label',
       fields: {
         title: field('text', { nullable: true, label: 'cms.fields.seo.title.label' }),

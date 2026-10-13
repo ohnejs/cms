@@ -33,6 +33,7 @@ export default defineCollection({
     cta: field('link', { collections: ${TARGETS}, nullable: true }),
     content: field('blocks', { allow: ['Text'] }),
     details: field('object', {
+      nullable: true,
       fields: { body: field('richText', { links: ${TARGETS}, allowEmpty: true, default: [] }) },
     }),
     items: field('repeater', {

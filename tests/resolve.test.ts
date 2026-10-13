@@ -45,7 +45,7 @@ export default defineCollection({
   fields: {
     name: field('text'),
     avatar: field('image'),
-    profile: field('object', { fields: { photo: field('image') } }),
+    profile: field('object', { nullable: true, fields: { photo: field('image') } }),
     content: field('blocks', { allow: ['Hero'] }),
     friend: field('record', { collection: 'Authors' }),
   },
