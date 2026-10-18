@@ -1,7 +1,15 @@
 import type { FieldQueryMeta, QueryRecord } from 'ohnejs';
 import type { RecordLink } from 'ohnejs/utils';
 
-import { blockQueryMetadata, queryMetadata, queryUntyped, useEnv, useEvent } from 'ohnejs';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
+  blockQueryMetadata,
+  queryMetadata,
+  queryUntyped,
+  runWithoutEvent,
+  useEnv,
+  useEvent,
+} from 'ohnejs';
 import {
   chunk,
   groupBy,
@@ -31,6 +39,11 @@ export const UPLOAD_FIELDS = [
   'focalX',
   'focalY',
 ] as const;
+
+/**
+ * The API origin `asVisitor` carries out of the request it leaves.
+ */
+const origins = new AsyncLocalStorage<string>();
 
 /**
  * Where one relation value sits: the object holding it and its key.
@@ -250,9 +263,23 @@ function absolutize(upload: QueryRecord): QueryRecord {
 }
 
 /**
+ * Runs `fn` as a visitor without a session, from inside any request.
+ * Every access and every `href` then answers as the website reads it.
+ * Upload URLs keep the origin the request reached the API at.
+ *
+ * @example
+ * ```ts
+ * await asVisitor(() => resolvePath('/about')) // -> the page as a visitor reads it
+ * ```
+ */
+export function asVisitor<R>(fn: () => R): R {
+  return origins.run(apiOrigin(), () => runWithoutEvent(fn));
+}
+
+/**
  * The origin a site reaches the API at: `API_URL`'s, or the current request's.
  */
 function apiOrigin(): string {
   const configured = useEnv().get('API_URL');
-  return new URL(configured ?? useEvent().url).origin;
+  return new URL(configured ?? origins.getStore() ?? useEvent().url).origin;
 }

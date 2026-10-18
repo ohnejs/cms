@@ -20,6 +20,8 @@ export default defineCollection({
     title: field('text'),
     ...pageFields(),
     note: field('text', { nullable: true, readable: false }),
+    link: field('link', { collections: ['Pages'], nullable: true }),
+    photo: field('image'),
     content: field('blocks', { allow: ['Hero'] }),
   },
   api: { read: { public: true, access: publishedScope }, create: true, update: true },
@@ -220,6 +222,28 @@ describe('preview drafts', () => {
     const post = (await resolve('/blog/new-post', token)).body.record;
     strictEqual(typeof post._updatedAt, 'number');
     deepStrictEqual(post._translations, []);
+  });
+
+  it('answers a draft as the website reads it, not as its editor', async () => {
+    const photo = await queryUntyped('Uploads').createOrThrow({
+      kind: 'file',
+      directory: '',
+      name: 'photo.png',
+      type: 'image/png',
+      size: 1,
+      hash: 'deadbeef',
+    });
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const response = await put(cookie, token, {
+      record: about,
+      path: '/about',
+      values: { slug: 'about', link: { collection: 'Pages', record: hidden }, photo: photo.UUID },
+    });
+    const { record } = (await response.json()) as any;
+    deepStrictEqual(record.link, { collection: 'Pages', record: hidden });
+    strictEqual(record.photo.url, `${base}/uploads/photo.png`);
+    deepStrictEqual(record, (await resolve('/about', token)).body.record);
   });
 
   it("refuses a draft under another session's token", async () => {

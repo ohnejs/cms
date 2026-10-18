@@ -3,6 +3,7 @@ import { isPlainObject, isString } from 'ohnejs/utils';
 
 import { draftsOf, writeDraft } from '../../../../src/preview/drafts.ts';
 import { ownToken } from '../../../../src/preview/tokens.ts';
+import { asVisitor } from '../../../../src/relations.ts';
 import { resolvePath } from '../../../../src/resolve.ts';
 
 /**
@@ -16,5 +17,7 @@ export default defineHandler(async ({ params }) => {
   useResponse().headers.set('cache-control', 'private, no-store');
   const path =
     isPlainObject(body) && isString(body.path) && body.path.startsWith('/') ? body.path : undefined;
-  return path === undefined ? { kind: 'notFound' } : resolvePath(path, await draftsOf(token));
+  if (path === undefined) return { kind: 'notFound' };
+  const drafts = await draftsOf(token);
+  return asVisitor(() => resolvePath(path, drafts));
 });

@@ -1,7 +1,8 @@
-import { badRequest, defineHandler, forbidden, runWithoutEvent, translate, useEvent } from 'ohnejs';
+import { badRequest, defineHandler, forbidden, translate, useEvent } from 'ohnejs';
 import { readReach } from 'ohnejs/auth';
 import { isNull } from 'ohnejs/utils';
 
+import { asVisitor } from '../../../src/relations.ts';
 import { resolvePath } from '../../../src/resolve.ts';
 
 /**
@@ -13,6 +14,6 @@ export default defineHandler(async () => {
   const path = useEvent().url.searchParams.get('path');
   if (isNull(path) || !path.startsWith('/')) throw badRequest(translate('cms.api.invalidPath'));
   if ((await readReach('Redirects')) === false) throw forbidden();
-  const answer = await runWithoutEvent(() => resolvePath(path));
+  const answer = await asVisitor(() => resolvePath(path));
   return { shadowed: answer.kind === 'page' };
 });

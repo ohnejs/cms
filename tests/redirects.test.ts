@@ -22,7 +22,7 @@ export default defineConfig({
       'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
 import { pageFields, publishedScope } from '@ohnejs/cms';
 export default defineCollection({
-  fields: { title: field('text', { translatable: true }), ...pageFields() },
+  fields: { title: field('text', { translatable: true }), ...pageFields(), photo: field('image') },
   api: { read: { public: true, access: publishedScope } },
 });
 `,
@@ -183,8 +183,16 @@ export default defineCollection({
       .getSetCookie()
       .map((line) => line.split(';')[0])
       .join('; ');
+    const photo = await queryUntyped('Uploads').createOrThrow({
+      kind: 'file',
+      directory: '',
+      name: 'photo.png',
+      type: 'image/png',
+      size: 1,
+      hash: 'deadbeef',
+    });
     await page('hidden', 'draft');
-    await page('shown');
+    await rename(await page('shown'), { photo: photo.UUID });
     strictEqual(await shadowed('/shown'), 403);
     strictEqual(await shadowed('/hidden', cookie), false);
     strictEqual(await shadowed('/shown', cookie), true);
