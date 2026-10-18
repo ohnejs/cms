@@ -39,5 +39,7 @@ reader can open it.
 - [Your website](https://ohne.dev/docs/cms/website) - reading pages and joining the live preview.
 - [Frameworks](https://ohne.dev/docs/cms/frameworks) - recipes for Nuxt, Next, React, and plain
   HTML.
+- [Monorepo](https://ohne.dev/docs/project/monorepo#adding-the-cms) - the CMS and your Nuxt or Next
+  website in one repository.
 - [SEO and redirects](https://ohne.dev/docs/cms/seo) - site settings, sitemap, and `robots.txt`.
 - [Webhooks](https://ohne.dev/docs/cms/webhooks) - tell a caching website when pages change.
