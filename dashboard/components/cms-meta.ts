@@ -51,7 +51,8 @@ export function hasPages(collection: DashboardCollection): boolean {
 
 /**
  * The site path of a record's page in `locale`, or `undefined` when it has no page there yet.
- * A route with a `[slug]` needs a slug; a singleton's static route needs nothing.
+ * A route with a `[slug]` needs a slug it can take, so `a/b` waits for a `[...slug]`.
+ * A singleton's static route needs nothing.
  * The home slug under `/[...slug]` is `/`, the path the site serves it at.
  */
 export function pagePath(
@@ -67,6 +68,7 @@ export function pagePath(
   if (isUndefined(pattern)) return undefined;
   const slug = record.slug;
   if (pattern.includes('[') && (!isString(slug) || slug === '')) return undefined;
+  if (!pattern.includes('[...slug]') && isString(slug) && slug.includes('/')) return undefined;
   const inner =
     pattern === '/[...slug]' && slug === cms.homeSlug
       ? '/'
