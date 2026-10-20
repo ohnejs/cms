@@ -1,7 +1,9 @@
 import type {} from 'ohnejs/uploads';
 
-import '../fields/_augment.ts';
-import { field } from 'ohnejs';
+import { field, useConfig } from 'ohnejs';
+import { isUndefined } from 'ohnejs/utils';
+
+import { routeEntries, useCMSConfig } from './config.ts';
 
 /**
  * Options for `pageFields`.
@@ -20,6 +22,7 @@ export interface PageFieldsOptions {
  * The fields a collection with pages carries: `slug`, `status`, `publishedAt`, `expiresAt`, and `seo`.
  * Spread them into `fields`, and read the collection through `publishedScope`.
  * A slug is unique per locale when translatable, and per collection otherwise.
+ * It holds `/` only in a collection whose route ends in `[...slug]`.
  *
  * @example
  * ```ts
@@ -33,6 +36,11 @@ export function pageFields(options: PageFieldsOptions = {}) {
   const translatable = options.translatable === true;
   return {
     slug: field('slug', {
+      nested: true,
+      validators: [
+        (value, ctx) =>
+          value.includes('/') && !nests(ctx.collection) ? 'cms.validation.slugNested' : undefined,
+      ],
       translatable,
       unique: true,
       uniquePerLocale: translatable,
@@ -77,4 +85,15 @@ export function pageFields(options: PageFieldsOptions = {}) {
       },
     }),
   };
+}
+
+/**
+ * Whether a route of `collection` takes a slug with `/`, through a `[...slug]`.
+ */
+function nests(collection: string): boolean {
+  const value = useCMSConfig().routes[collection];
+  if (isUndefined(value)) return false;
+  return routeEntries(value, useConfig().collections.locales).some(([, pattern]) =>
+    pattern.includes('[...slug]'),
+  );
 }

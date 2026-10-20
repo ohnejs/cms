@@ -15,7 +15,6 @@
     "collections",
     "commands",
     "dashboard",
-    "fields",
     "messages",
     "middleware",
     "migrations",

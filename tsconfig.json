@@ -18,7 +18,6 @@
     "boot/**/*.ts",
     "collections/**/*.ts",
     "commands/**/*.ts",
-    "fields/**/*.ts",
     "middleware/**/*.ts",
     "src/**/*.ts",
     "tests/**/*.ts",

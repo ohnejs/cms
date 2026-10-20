@@ -37,7 +37,6 @@
     }
   },
   "validation": {
-    "slug": "Use lowercase letters, digits, and hyphens",
     "slugNested": "A slug of this collection holds no slashes",
     "path": "Start the path with a slash",
     "target": "Use a path starting with a slash, or a full URL"
