@@ -1,7 +1,7 @@
 import type { RouteMatcher } from 'ohnejs/utils';
 
 import { useConfig } from 'ohnejs';
-import { compareSpecificity, compileRoute, fillRoute } from 'ohnejs/utils';
+import { compareSpecificity, compileRoute, fillRoute, fitsRoute, isString } from 'ohnejs/utils';
 
 import { routeEntries, useCMSConfig } from './config.ts';
 
@@ -64,15 +64,16 @@ export function splitLocale(path: string): { locale: string; path: string } | un
 
 /**
  * The site path of a record shown by `route`, its locale prefix included.
+ * A slug that is missing or does not fit the route, like `a/b` under `[slug]`, gives the record no path.
  */
-export function routePath(route: CMSRoute, slug: string | undefined): string {
+export function routePath(route: CMSRoute, slug: string | undefined): string | undefined {
   const { locales, defaultLocale } = useConfig().collections;
-  const home = isHome(route) && slug === useCMSConfig().homeSlug;
-  const inner = home
-    ? '/'
-    : route.match.params.length === 0
-      ? route.match.pattern
-      : fillRoute(route.match.pattern, { slug: slug ?? '' });
+  const { pattern, params } = route.match;
+  let inner: string;
+  if (isHome(route) && slug === useCMSConfig().homeSlug) inner = '/';
+  else if (params.length === 0) inner = pattern;
+  else if (isString(slug) && fitsRoute(pattern, { slug })) inner = fillRoute(pattern, { slug });
+  else return undefined;
   const prefixed =
     locales.length > 1 && (route.locale !== defaultLocale || useCMSConfig().prefixDefaultLocale);
   return prefixed ? `/${route.locale}${inner === '/' ? '' : inner}` : inner;

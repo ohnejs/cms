@@ -69,8 +69,9 @@ export async function alternatesOf(
       code === locale || !translatable
         ? record.slug
         : (await readIn(collection, record.UUID as string, code))?.slug;
-    if (route.match.params.length > 0 && !isString(slug)) continue;
-    const href = absolute(routePath(route, isString(slug) ? slug : undefined));
+    const path = routePath(route, isString(slug) ? slug : undefined);
+    if (isUndefined(path)) continue;
+    const href = absolute(path);
     alternates.push({ hreflang: code, href });
     if (code === defaultLocale) alternates.push({ hreflang: 'x-default', href });
   }

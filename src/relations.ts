@@ -144,7 +144,7 @@ function collect(
 /**
  * Sets each link's `href` to its target's path in `locale`, as the reader may read the target.
  * A forged `href` never survives, since a draft skips the sanitizer that drops it.
- * A link whose target is missing, hidden, or without a route or slug in `locale` keeps no `href`.
+ * A link whose target is missing, hidden, or without a route or a fitting slug in `locale` keeps no `href`.
  */
 async function resolveLinks(links: readonly RecordLink[], locale: string): Promise<void> {
   for (const link of links) delete link.href;
@@ -174,8 +174,8 @@ async function readPaths(route: CMSRoute, ids: string[]): Promise<Map<string, st
   );
   const paths = new Map<string, string>();
   for (const record of records) {
-    const slug = isString(record.slug) ? record.slug : undefined;
-    if (!dynamic || !isUndefined(slug)) paths.set(record.UUID as string, routePath(route, slug));
+    const path = routePath(route, isString(record.slug) ? record.slug : undefined);
+    if (!isUndefined(path)) paths.set(record.UUID as string, path);
   }
   return paths;
 }
@@ -204,9 +204,8 @@ async function readTargets(
   const route = routesIn(locale).find((entry) => entry.collection === target);
   if (!isUndefined(route)) {
     for (const record of records) {
-      if (route.match.params.length === 0 || isString(record.slug)) {
-        record.path = routePath(route, isString(record.slug) ? record.slug : undefined);
-      }
+      const path = routePath(route, isString(record.slug) ? record.slug : undefined);
+      if (!isUndefined(path)) record.path = path;
     }
   }
   return new Map(records.map((record) => [record.UUID as string, record]));

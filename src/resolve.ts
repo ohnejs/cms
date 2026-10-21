@@ -57,6 +57,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
     const record = await readPage(route, slug, drafts);
     if (isUndefined(record)) continue;
     const path = routePath(route, isString(record.slug) ? record.slug : slug);
+    if (isUndefined(path)) continue;
     if (!home && isHome(route) && slug === homeSlug)
       return { kind: 'redirect', to: path, code: 301 };
     await loadRelations(record, route.collection, route.locale);

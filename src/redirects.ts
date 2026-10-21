@@ -56,7 +56,7 @@ export function watchMoves(): void {
       if (isUndefined(route)) continue;
       const from = routePath(route, old.slug);
       const to = routePath(route, record.slug);
-      if (from !== to) await move(tx, from, to);
+      if (!isUndefined(from) && !isUndefined(to) && from !== to) await move(tx, from, to);
     }
   });
 }

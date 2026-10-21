@@ -1,5 +1,5 @@
 import { queryUntyped, useConfig } from 'ohnejs';
-import { escapeXML, isPlainObject, isString } from 'ohnejs/utils';
+import { escapeXML, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
 import { routePath, routesIn } from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
@@ -54,11 +54,12 @@ async function collect(): Promise<Map<string, Entry>> {
       for (const record of await readAll(route.collection, locale)) {
         if (record.slug === '404') continue;
         if (isPlainObject(record.seo) && record.seo.noindex === true) continue;
-        if (route.match.params.length > 0 && !isString(record.slug)) continue;
+        const path = routePath(route, isString(record.slug) ? record.slug : undefined);
+        if (isUndefined(path)) continue;
         const key = `${route.collection}:${record.UUID as string}`;
         const entry = entries.get(key) ?? { updated: 0, paths: new Map() };
         entry.updated = Math.max(entry.updated, Number(record._updatedAt) || 0);
-        entry.paths.set(locale, routePath(route, isString(record.slug) ? record.slug : undefined));
+        entry.paths.set(locale, path);
         entries.set(key, entry);
       }
     }
