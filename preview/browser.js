@@ -398,8 +398,7 @@ function takeToken(keep) {
   const url = new URL(location.href);
   const token = url.searchParams.get('ohne-preview');
   if (token === null || keep) return token ?? undefined;
-  url.searchParams.delete('ohne-preview');
-  history.replaceState(history.state, '', url);
+  history.replaceState(history.state, '', withoutToken(url));
   return token;
 }
 
@@ -407,13 +406,37 @@ function takeToken(keep) {
  * Renders the page again from the server with the token and swaps its body in, keeping the scroll.
  */
 async function refetch(token) {
-  const url = new URL(location.href);
-  if (token) url.searchParams.set('ohne-preview', token);
+  const url = withoutToken(new URL(location.href));
+  if (token) url.search += `${url.search ? '&' : ''}ohne-preview=${encodeURIComponent(token)}`;
   const html = await (await fetch(url)).text();
   const next = new DOMParser().parseFromString(html, 'text/html').body;
   const { scrollX, scrollY } = window;
   document.body.replaceWith(next);
   window.scrollTo(scrollX, scrollY);
+}
+
+/**
+ * `url` without its preview token, every other byte of its query kept, since a raw bracket is structure.
+ */
+function withoutToken(url) {
+  url.search = url.search
+    .slice(1)
+    .split('&')
+    .filter((pair) => keyOf(pair) !== 'ohne-preview')
+    .join('&');
+  return url;
+}
+
+/**
+ * The decoded key of a raw `key=value` pair, or the raw key when it holds a broken escape.
+ */
+function keyOf(pair) {
+  const key = pair.split('=', 1)[0].replaceAll('+', ' ');
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
 }
 
 /**
