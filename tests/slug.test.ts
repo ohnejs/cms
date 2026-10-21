@@ -54,3 +54,94 @@ export default defineCollection({ fields: { slug: field('slug') } });
     deepStrictEqual(result.ok ? undefined : Object.keys(result.errors), ['slug']);
   });
 });
+
+describe('slug field across locales', () => {
+  let app: TestApp;
+
+  before(async () => {
+    const page = (translatable: boolean) => `import { defineCollection, field } from 'ohnejs';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({ fields: { title: field('text'), ...pageFields({ translatable: ${translatable} }) } });
+`;
+    app = await startApp({
+      'ohne.config.ts': `import { defineConfig } from 'ohnejs';
+export default defineConfig({
+  layers: ['@ohnejs/cms'],
+  collections: { locales: ['en', 'de'], defaultLocale: 'en' },
+  cms: {
+    routes: {
+      Guides: { en: '/guides/[slug]', de: '/docs/[...slug]' },
+      Shared: { en: '/s/[slug]', de: '/t/[...slug]' },
+      Partial: { en: '/[...slug]' },
+    },
+  },
+});
+`,
+      'collections/Guides.ts': page(true),
+      'collections/Shared.ts': page(false),
+      'collections/Partial.ts': page(true),
+    });
+  });
+
+  after(() => app.stop());
+
+  const failsAt = async (write: Promise<{ ok: boolean; errors?: object }>) => {
+    const result = await write;
+    return result.ok ? undefined : Object.keys(result.errors ?? {});
+  };
+
+  it("holds a translated slug to its own locale's route", async () => {
+    deepStrictEqual(await failsAt(queryUntyped('Guides').create({ title: 'x', slug: 'a/b' })), [
+      'slug',
+    ]);
+    const nested = await queryUntyped('Guides').locale('de').create({ title: 'x', slug: 'a/b' });
+    strictEqual(nested.ok, true);
+    const filled = await queryUntyped('Guides').create(
+      { title: 'y', slug: 'flat' },
+      { locales: { de: { slug: 'c/d' } } },
+    );
+    strictEqual(filled.ok, true);
+  });
+
+  it("holds a shared slug to every locale's route", async () => {
+    deepStrictEqual(await failsAt(queryUntyped('Shared').create({ title: 'x', slug: 'a/b' })), [
+      'slug',
+    ]);
+    strictEqual((await queryUntyped('Shared').create({ title: 'y', slug: 'c' })).ok, true);
+  });
+
+  it('refuses a slash in a locale without a route', async () => {
+    deepStrictEqual(
+      await failsAt(queryUntyped('Partial').locale('de').create({ title: 'x', slug: 'a/b' })),
+      ['slug'],
+    );
+  });
+});
+
+describe('slug field under a locale tag written loosely', () => {
+  let app: TestApp;
+
+  before(async () => {
+    app = await startApp({
+      'ohne.config.ts': `import { defineConfig } from 'ohnejs';
+export default defineConfig({
+  layers: ['@ohnejs/cms'],
+  collections: { locales: ['en', 'de-at'], defaultLocale: 'en' },
+  cms: { routes: { Posts: { en: '/blog/[slug]', 'de-at': '/[...slug]' } } },
+});
+`,
+      'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({ fields: { title: field('text'), ...pageFields({ translatable: true }) } });
+`,
+    });
+  });
+
+  after(() => app.stop());
+
+  it('matches the route of the canonical tag the write carries', async () => {
+    const nested = await queryUntyped('Posts').locale('de-at').create({ title: 'x', slug: 'a/b' });
+    strictEqual(nested.ok, true);
+    strictEqual((await queryUntyped('Posts').create({ title: 'y', slug: 'c/d' })).ok, false);
+  });
+});

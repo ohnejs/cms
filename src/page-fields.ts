@@ -1,7 +1,7 @@
 import type {} from 'ohnejs/uploads';
 
 import { field, useConfig } from 'ohnejs';
-import { isUndefined } from 'ohnejs/utils';
+import { canonicalizeLanguage, fitsRoute, isUndefined } from 'ohnejs/utils';
 
 import { routeEntries, useCMSConfig } from './config.ts';
 
@@ -22,7 +22,8 @@ export interface PageFieldsOptions {
  * The fields a collection with pages carries: `slug`, `status`, `publishedAt`, `expiresAt`, and `seo`.
  * Spread them into `fields`, and read the collection through `publishedScope`.
  * A slug is unique per locale when translatable, and per collection otherwise.
- * It holds `/` only in a collection whose route ends in `[...slug]`.
+ * It must fit every route it renders through: its own locale's when translatable, else every locale's.
+ * So it holds `/` only where each such route ends in `[...slug]`.
  *
  * @example
  * ```ts
@@ -39,7 +40,9 @@ export function pageFields(options: PageFieldsOptions = {}) {
       nested: true,
       validators: [
         (value, ctx) =>
-          value.includes('/') && !nests(ctx.collection) ? 'cms.validation.slugNested' : undefined,
+          fits(value, ctx.collection, translatable ? ctx.locale : undefined)
+            ? undefined
+            : 'cms.validation.slugNested',
       ],
       translatable,
       unique: true,
@@ -88,12 +91,17 @@ export function pageFields(options: PageFieldsOptions = {}) {
 }
 
 /**
- * Whether a route of `collection` takes a slug with `/`, through a `[...slug]`.
+ * Whether `slug` fits every route of `collection` it renders through: `locale`'s alone when given, else all.
+ * The write carries `locale` canonical, so each configured tag is compared in its canonical form.
+ * Without such a route it has no address to fit, so it only keeps out of `/`.
  */
-function nests(collection: string): boolean {
+function fits(slug: string, collection: string, locale: string | undefined): boolean {
   const value = useCMSConfig().routes[collection];
-  if (isUndefined(value)) return false;
-  return routeEntries(value, useConfig().collections.locales).some(([, pattern]) =>
-    pattern.includes('[...slug]'),
-  );
+  const patterns = isUndefined(value)
+    ? []
+    : routeEntries(value, useConfig().collections.locales)
+        .filter(([code]) => isUndefined(locale) || canonicalizeLanguage(code) === locale)
+        .map(([, pattern]) => pattern);
+  if (patterns.length === 0) return !slug.includes('/');
+  return patterns.every((pattern) => fitsRoute(pattern, { slug }));
 }
