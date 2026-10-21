@@ -1,7 +1,7 @@
 import type { QueryRecord } from 'ohnejs';
 
 import { queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { isPlainObject, isString, isUndefined } from 'ohnejs/utils';
+import { isEmpty, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
 import { useCMSConfig } from './config.ts';
 import { loadRelations } from './relations.ts';
@@ -30,15 +30,16 @@ export interface Alternate {
 /**
  * The SEO of a page: its own `seo` fields, falling back to the `Site` settings.
  * The title runs through `Site.titleTemplate`; a page or a site marked `noindex` asks robots to stay away.
+ * A locale without its own site name takes the default locale's, so a title never ends in a bare separator.
  */
 export async function seoOf(record: QueryRecord, locale: string, path: string): Promise<SEO> {
   const site = await siteIn(locale);
   const own = isPlainObject(record.seo) ? record.seo : {};
   const title = textOf(own.title) ?? textOf(record.title) ?? '';
-  const name = textOf(site.name) ?? '';
+  const name = textOf(site.name) ?? textOf((await queryUntyped('Site').findFirst())?.name) ?? '';
   const template = textOf(site.titleTemplate) ?? '{title}';
   const seo: SEO = {
-    title: title === '' ? name : template.replaceAll('{title}', title).replaceAll('{site}', name),
+    title: isEmpty(title) ? name : template.replaceAll('{title}', title).replaceAll('{site}', name),
     canonical: absolute(path),
   };
   const description = textOf(own.description) ?? textOf(site.description);
@@ -110,7 +111,7 @@ async function readIn(
  * A non-empty string value, or `undefined`.
  */
 function textOf(value: unknown): string | undefined {
-  return isString(value) && value !== '' ? value : undefined;
+  return isString(value) && !isEmpty(value) ? value : undefined;
 }
 
 /**

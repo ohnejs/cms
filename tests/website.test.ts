@@ -170,6 +170,12 @@ export default defineCollection({
     strictEqual((await resolve('/hidden')).seo.robots, 'noindex');
   });
 
+  it('names the site in a locale without its own site name, and borrows no description', async () => {
+    const post = await resolve('/de/artikel/hallo');
+    strictEqual(post.seo.title, 'Hallo | Acme');
+    strictEqual(post.seo.description, undefined);
+  });
+
   it('lists the page in every locale, with the default locale as x-default', async () => {
     const post = await resolve('/blog/hello');
     deepStrictEqual(post.alternates, [
