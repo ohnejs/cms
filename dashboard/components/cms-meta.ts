@@ -1,7 +1,7 @@
 import type { DashboardCollection } from 'ohnejs/dashboard';
 
 import { dashboardMeta } from 'ohnejs/dashboard';
-import { fillRoute, isString, isUndefined } from 'ohnejs/utils';
+import { compileRoute, fillRoute, fitsRoute, isString, isUndefined } from 'ohnejs/utils';
 
 declare module 'ohnejs/dashboard' {
   interface DashboardMeta {
@@ -51,8 +51,8 @@ export function hasPages(collection: DashboardCollection): boolean {
 
 /**
  * The site path of a record's page in `locale`, or `undefined` when it has no page there yet.
- * A route with a `[slug]` needs a slug it can take, so `a/b` waits for a `[...slug]`.
- * A singleton's static route needs nothing.
+ * A route with a param needs a slug that fits it, so `a/b` waits for a `[...slug]`.
+ * A singleton's static route needs nothing, and a locale without a route has no page.
  * The home slug under `/[...slug]` is `/`, the path the site serves it at.
  */
 export function pagePath(
@@ -63,18 +63,14 @@ export function pagePath(
   const meta = dashboardMeta();
   const cms = meta?.cms;
   if (isUndefined(meta) || isUndefined(cms)) return undefined;
-  const routes = cms.routes[collection.name] ?? {};
-  const pattern = routes[locale] ?? routes[meta.defaultLocale];
+  const pattern = cms.routes[collection.name]?.[locale];
   if (isUndefined(pattern)) return undefined;
   const slug = record.slug;
-  if (pattern.includes('[') && (!isString(slug) || slug === '')) return undefined;
-  if (!pattern.includes('[...slug]') && isString(slug) && slug.includes('/')) return undefined;
-  const inner =
-    pattern === '/[...slug]' && slug === cms.homeSlug
-      ? '/'
-      : pattern.includes('[')
-        ? fillRoute(pattern, { slug: slug as string })
-        : pattern;
+  let inner: string;
+  if (pattern === '/[...slug]' && slug === cms.homeSlug) inner = '/';
+  else if (compileRoute(pattern).params.length === 0) inner = pattern;
+  else if (isString(slug) && fitsRoute(pattern, { slug })) inner = fillRoute(pattern, { slug });
+  else return undefined;
   const prefixed =
     meta.locales.length > 1 && (locale !== meta.defaultLocale || cms.prefixDefaultLocale);
   return prefixed ? `/${locale}${inner === '/' ? '' : inner}` : inner;
