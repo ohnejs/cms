@@ -1,7 +1,14 @@
 import type { QueryRecord } from 'ohnejs';
 
 import { queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { decodeRouteParams, isNull, isString, isUndefined } from 'ohnejs/utils';
+import {
+  decodeRouteParams,
+  isEmpty,
+  isNull,
+  isString,
+  isUndefined,
+  percentDecode,
+} from 'ohnejs/utils';
 
 import type { Draft } from './preview/drafts.ts';
 
@@ -32,7 +39,8 @@ export type Resolved =
  * Resolves a site path to the record a route pattern matches, read as the caller may read it.
  *
  * The path's locale prefix picks the locale; the most specific pattern that finds a record wins.
- * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`, and that slug's own path redirects to `/`.
+ * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`.
+ * That slug's own path redirects to `/`.
  * A redirect whose `from` is the path answers only when no page does, so a live page shadows it.
  * A path nothing answers carries the page with the slug `404`, when there is one.
  * A path whose locale prefix is ruled out carries the default locale's.
@@ -49,7 +57,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
     return (await redirectOf(url)) ?? (await missIn(useConfig().collections.defaultLocale, drafts));
   }
   const { homeSlug } = useCMSConfig();
-  const home = split.path === '/' || split.path === '';
+  const home = split.path === '/' || isEmpty(split.path);
   for (const route of routesIn(split.locale)) {
     const params = home && isHome(route) ? { slug: homeSlug } : route.match(split.path);
     if (isNull(params)) continue;
@@ -89,16 +97,19 @@ async function redirectOf(url: URL): Promise<Resolved | undefined> {
 
 /**
  * `to` with the request's query appended after its own, its hash kept last.
+ * Both queries keep their bytes, so a structured value like `tags=[a,b]` still reads as a list.
  * The preview token goes along to a path of the site, so a preview follows a moved page.
  * It never goes to another site, where a share token would land in logs and referers.
  */
 function forward(to: string, url: URL): string {
-  if (url.search === '') return to;
+  if (isEmpty(url.search)) return to;
   const target = new URL(to, url);
   const own = target.origin === url.origin;
-  for (const [key, value] of url.searchParams) {
-    if (own || key !== 'ohne-preview') target.searchParams.append(key, value);
-  }
+  const pairs = url.search
+    .slice(1)
+    .split('&')
+    .filter((pair) => own || percentDecode(pair.split('=')[0]!) !== 'ohne-preview');
+  target.search = [target.search.slice(1), ...pairs].filter((pair) => !isEmpty(pair)).join('&');
   return own ? target.pathname + target.search + target.hash : target.href;
 }
 

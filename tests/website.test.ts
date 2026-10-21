@@ -145,6 +145,11 @@ export default defineCollection({
       to: '/about?tab=team&ref=x#staff',
       code: 301,
     });
+    deepStrictEqual(await resolve('/moved?tags=[a%2Cb,new]'), {
+      kind: 'redirect',
+      to: '/about?tab=team&tags=[a%2Cb,new]#staff',
+      code: 301,
+    });
   });
 
   it('carries the preview token along a redirect within the site and never to another', async () => {
