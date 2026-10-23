@@ -41,7 +41,7 @@
     "typecheck": "tsc && tsc -p dashboard/tsconfig.json"
   },
   "devDependencies": {
-    "@ohnejs/client": "0.1.0",
+    "@ohnejs/client": "0.2.0",
     "@types/node": "26.0.0",
     "ohnejs": "0.4.0",
     "oxfmt": "0.55.0",
