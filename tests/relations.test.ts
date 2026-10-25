@@ -1,6 +1,6 @@
-import { deepStrictEqual, strictEqual } from 'node:assert';
+import { deepStrictEqual, match, strictEqual } from 'node:assert';
 import { after, before, describe, it } from 'node:test';
-import { queryUntyped } from 'ohnejs';
+import { hook, queryUntyped } from 'ohnejs';
 
 import { startApp, type TestApp } from './_app.ts';
 
@@ -299,5 +299,121 @@ describe('record links', () => {
       linksOf(record.body).map((link) => link.href),
       targets.map((_, i) => `/guides/bulk-${i}`),
     );
+  });
+});
+
+const BATCH_APP = {
+  'ohne.config.ts': `import { defineConfig } from 'ohnejs';
+export default defineConfig({
+  layers: ['@ohnejs/cms'],
+  cms: { routes: { Pages: '/[...slug]', Posts: '/blog/[slug]' } },
+});
+`,
+  'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields() },
+  api: { read: 'public' },
+});
+`,
+  'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields } from '@ohnejs/cms';
+export default defineCollection({
+  fields: {
+    title: field('text'),
+    ...pageFields(),
+    image: field('image'),
+    author: field('record', { collection: 'Authors' }),
+    tags: field('records', { collection: 'Tags' }),
+    cta: field('link', { collections: ['Pages', 'Posts'], nullable: true }),
+  },
+  api: { read: 'public' },
+});
+`,
+  'collections/Authors.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: { name: field('text'), avatar: field('image') },
+  api: { read: 'public' },
+});
+`,
+  'collections/Tags.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({ fields: { name: field('text') }, api: { read: 'public' } });
+`,
+};
+
+describe('relations of a list', () => {
+  let app: TestApp;
+  let statements = 0;
+
+  /**
+   * Reads `path` from the API and answers its JSON and the statements the read ran.
+   */
+  async function counted(path: string): Promise<{ body: any; statements: number }> {
+    statements = 0;
+    const body = (await app.get(path)).body;
+    return { body, statements };
+  }
+
+  before(async () => {
+    hook('query:filter', () => {
+      statements++;
+    });
+    app = await startApp(BATCH_APP);
+    const upload = async (name: string) =>
+      (
+        await queryUntyped('Uploads').createOrThrow({
+          kind: 'file',
+          directory: '',
+          name,
+          type: 'image/png',
+          size: 1,
+          hash: 'deadbeef',
+          private: false,
+        })
+      ).UUID as string;
+    const page = await queryUntyped('Pages').createOrThrow({
+      status: 'published',
+      title: 'Home',
+      slug: 'index',
+    });
+    for (let i = 0; i < 50; i++) {
+      const author = await queryUntyped('Authors').createOrThrow({
+        name: `Author ${i}`,
+        avatar: await upload(`avatar-${i}.png`),
+      });
+      const tag = await queryUntyped('Tags').createOrThrow({ name: `Tag ${i}` });
+      await queryUntyped('Posts').createOrThrow({
+        status: 'published',
+        title: `Post ${String(i).padStart(2, '0')}`,
+        slug: `post-${i}`,
+        image: await upload(`image-${i}.png`),
+        author: author.UUID,
+        tags: [tag.UUID],
+        cta: { collection: 'Pages', record: page.UUID },
+      });
+    }
+  });
+
+  after(() => app.stop());
+
+  it('loads a page of records as it loads each record alone', async () => {
+    const { body } = await app.get('/cms/records/Posts?perPage=50&order=[title]');
+    strictEqual(body.records.length, 50);
+    for (const record of body.records) {
+      deepStrictEqual(record, (await app.get(`/cms/records/Posts/${record.UUID}`)).body);
+    }
+    const first = body.records[0];
+    match(first.image.url, /\/uploads\/image-0\.png$/);
+    match(first.author.avatar.url, /\/uploads\/avatar-0\.png$/);
+    strictEqual(first.tags[0].name, 'Tag 0');
+    strictEqual(first.cta.href, '/');
+  });
+
+  it('runs as many statements for 50 records as for 10', async () => {
+    const ten = await counted('/cms/records/Posts?perPage=10');
+    const fifty = await counted('/cms/records/Posts?perPage=50');
+    strictEqual(ten.body.records.length, 10);
+    strictEqual(fifty.body.records.length, 50);
+    strictEqual(fifty.statements, ten.statements);
   });
 });

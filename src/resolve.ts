@@ -68,7 +68,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
     if (isUndefined(path)) continue;
     if (!home && isHome(route) && slug === homeSlug)
       return { kind: 'redirect', to: path, code: 301 };
-    await loadRelations(record, route.collection, route.locale);
+    await loadRelations([record], route.collection, route.locale);
     return {
       kind: 'page',
       collection: route.collection,
@@ -121,7 +121,7 @@ async function missIn(locale: string, drafts: readonly Draft[]): Promise<Resolve
   if (isUndefined(route)) return { kind: 'notFound' };
   const page = await readPage(route, '404', drafts);
   if (isUndefined(page)) return { kind: 'notFound' };
-  await loadRelations(page, route.collection, route.locale);
+  await loadRelations([page], route.collection, route.locale);
   return { kind: 'notFound', page };
 }
 

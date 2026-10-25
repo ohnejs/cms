@@ -1,7 +1,15 @@
+import type { QueryRecord } from 'ohnejs';
 import type { RouteMatcher } from 'ohnejs/utils';
 
 import { useConfig } from 'ohnejs';
-import { compareSpecificity, compileRoute, fillRoute, fitsRoute, isString } from 'ohnejs/utils';
+import {
+  compareSpecificity,
+  compileRoute,
+  fillRoute,
+  fitsRoute,
+  isString,
+  isUndefined,
+} from 'ohnejs/utils';
 
 import { routeEntries, useCMSConfig } from './config.ts';
 
@@ -77,6 +85,23 @@ export function routePath(route: CMSRoute, slug: string | undefined): string | u
   const prefixed =
     locales.length > 1 && (route.locale !== defaultLocale || useCMSConfig().prefixDefaultLocale);
   return prefixed ? `/${route.locale}${inner === '/' ? '' : inner}` : inner;
+}
+
+/**
+ * Sets each record's `path`, its site path in `locale`, when `collection` has a route there.
+ * A record whose slug does not fit the route keeps no `path`.
+ */
+export function setPaths(
+  records: readonly QueryRecord[],
+  collection: string,
+  locale: string,
+): void {
+  const route = routesIn(locale).find((entry) => entry.collection === collection);
+  if (isUndefined(route)) return;
+  for (const record of records) {
+    const path = routePath(route, isString(record.slug) ? record.slug : undefined);
+    if (!isUndefined(path)) record.path = path;
+  }
 }
 
 /**

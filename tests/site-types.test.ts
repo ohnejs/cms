@@ -181,6 +181,31 @@ export function title(page: Page<'Pages'>): string {
   return page.title;
 }
 
+export async function data(uuid: string): Promise<string[]> {
+  const site = await ohne.read('Site', { select: ['titleTemplate'] });
+  // @ts-expect-error - \`select\` leaves \`noindex\` out
+  void site.noindex;
+  const author = await ohne.read('Authors', uuid);
+  const posts = await ohne.list('Posts', { order: ['-title'], select: ['title'], page: 2 });
+  // @ts-expect-error - \`select\` leaves \`image\` out
+  void posts.records[0]?.image;
+  // @ts-expect-error - a singleton takes no \`UUID\`
+  await ohne.read('Site', uuid);
+  // @ts-expect-error - a list takes no singleton
+  await ohne.list('Site');
+  // @ts-expect-error - a post has no \`views\`
+  await ohne.list('Posts', { order: ['views'] });
+  // @ts-expect-error - a visitor may not read \`Secrets\`
+  await ohne.list('Secrets');
+  // @ts-expect-error - uploads arrive inside the records that carry them
+  await ohne.list('Uploads');
+  return [
+    site.UUID + site.titleTemplate,
+    image(author?.avatar ?? null),
+    ...posts.records.map((post) => (post.title ?? '') + (post.path ?? '')),
+  ];
+}
+
 export async function render(path: string): Promise<string> {
   const page = await ohne.resolve(path);
   if (page.kind !== 'page') return page.kind === 'notFound' ? (page.page?.title ?? '') : '';
@@ -224,39 +249,47 @@ function compile(types: string, consumer: string): string {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ohne-site-')));
   try {
     writeFileSync(join(dir, 'ohne.ts'), types);
-    writeFileSync(join(dir, 'consumer.ts'), consumer);
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-    writeFileSync(
-      join(dir, 'tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          module: 'nodenext',
-          target: 'esnext',
-          lib: ['esnext', 'dom'],
-          types: [],
-          noEmit: true,
-          allowImportingTsExtensions: true,
-          verbatimModuleSyntax: true,
-        },
-        include: ['*.ts'],
-      }),
-    );
-    mkdirSync(join(dir, 'node_modules', '@ohnejs'), { recursive: true });
-    symlinkSync(
-      realpathSync(join(PACKAGE, 'node_modules', '@ohnejs', 'client')),
-      join(dir, 'node_modules', '@ohnejs', 'client'),
-      'dir',
-    );
-    const { stdout, stderr, status } = spawnSync(
-      join(PACKAGE, 'node_modules', '.bin', 'tsc'),
-      ['-p', dir],
-      { encoding: 'utf8' },
-    );
-    return `${stdout}${stderr}${status === 0 ? '' : `exit ${status}`}`;
+    return typecheck(dir, consumer);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Type-checks `consumer` as `consumer.ts` in `dir`, beside `@ohnejs/client`.
+ * Returns what `tsc` printed and its exit code, empty when it compiled.
+ */
+function typecheck(dir: string, consumer: string): string {
+  writeFileSync(join(dir, 'consumer.ts'), consumer);
+  writeFileSync(
+    join(dir, 'tsconfig.json'),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'nodenext',
+        target: 'esnext',
+        lib: ['esnext', 'dom'],
+        types: [],
+        noEmit: true,
+        allowImportingTsExtensions: true,
+        verbatimModuleSyntax: true,
+      },
+      files: ['consumer.ts'],
+    }),
+  );
+  mkdirSync(join(dir, 'node_modules', '@ohnejs'), { recursive: true });
+  symlinkSync(
+    realpathSync(join(PACKAGE, 'node_modules', '@ohnejs', 'client')),
+    join(dir, 'node_modules', '@ohnejs', 'client'),
+    'dir',
+  );
+  const { stdout, stderr, status } = spawnSync(
+    join(PACKAGE, 'node_modules', '.bin', 'tsc'),
+    ['-p', dir],
+    { encoding: 'utf8' },
+  );
+  return `${stdout}${stderr}${status === 0 ? '' : `exit ${status}`}`;
 }
 
 describe('site types', () => {
@@ -346,6 +379,53 @@ describe('site types', () => {
     match(pin ?? '', /node_modules\/pin-layer\/fields\/pin\.ts/);
   });
 
+  it('types each collection a visitor may read as `GET /cms/records` answers it', async () => {
+    const { text } = await siteTypes();
+    const records = text.slice(text.indexOf('export interface Records {'));
+    deepStrictEqual(
+      [...records.matchAll(/^ {2}(\w+): \{$/gm)].map(([, name]) => name).slice(0, 4),
+      ['Authors', 'Pages', 'Posts', 'Site'],
+    );
+    match(
+      records,
+      /^ {2}\};\n\}\n\n\/\*\*\n \* The collections in `Records` that hold one record\./m,
+    );
+    for (const hidden of ['Secrets', 'Uploads', 'Users', 'CMSDrafts', 'CMSShares', 'Redirects']) {
+      ok(!new RegExp(`^ {2}${hidden}: \\{`, 'm').test(records), hidden);
+    }
+    deepStrictEqual(members(records, 'Authors', 2), [
+      'UUID',
+      '_updatedAt',
+      'name',
+      'avatar',
+      'spot',
+    ]);
+    const post = members(records, 'Posts', 2);
+    deepStrictEqual(post.slice(0, 4), ['UUID', '_updatedAt', '_translations', 'path']);
+    ok(!post.includes('note'));
+    ok(!members(records, 'Site', 2).includes('path'));
+    match(records, /^ {4}cover: Related\['Authors'\] \| null;$/m);
+    match(text, /^export type Singleton = 'Site';$/m);
+    match(text, /^ {2}records: Records;$/m);
+    match(text, /^ {2}singletons: Singleton;$/m);
+    match(
+      text.split('\n')[1] ?? '',
+      /`GET \/cms\/routes\/resolve`, `GET \/cms\/records` and `POST \/collections`/,
+    );
+  });
+
+  it('names exactly the fields `GET /cms/records` answers', async () => {
+    const { UUID } = await queryUntyped('Authors').createOrThrow({ name: 'Ada' });
+    const { text } = await siteTypes();
+    const records = text.slice(text.indexOf('export interface Records {'));
+    const author = await app.get(`/cms/records/Authors/${UUID}`);
+    strictEqual(author.status, 200);
+    deepStrictEqual(Object.keys(author.body).sort(), members(records, 'Authors', 2).sort());
+    const site = await app.get('/cms/records/Site');
+    strictEqual(site.status, 200);
+    deepStrictEqual(Object.keys(site.body).sort(), members(records, 'Site', 2).sort());
+  });
+
   it('compiles for a website, and rejects a misuse', async () => {
     strictEqual(compile((await siteTypes()).text, CONSUMER), '');
   });
@@ -374,7 +454,46 @@ describe('site types without rich text', () => {
     strictEqual(text.match(/^import /m), null);
     deepStrictEqual(degraded, []);
     match(text, /^export interface Blocks \{\}$/m);
+    match(text, /^export interface Creatable \{\}$/m);
+    match(text, /^ {2}creatable: Creatable;$/m);
     ok(!text.includes('ImageVariant'));
+  });
+});
+
+describe('site types without a singleton', () => {
+  let app: TestApp;
+
+  before(async () => {
+    app = await startApp({
+      ...PLAIN,
+      'collections/Site.ts': `import { defineCollection } from 'ohnejs';
+import site from '../node_modules/@ohnejs/cms/collections/Site.ts';
+export default defineCollection({ ...site, api: { update: true } });
+`,
+    });
+  });
+
+  after(async () => {
+    await app.stop();
+  });
+
+  it('names none, so `read` takes a `UUID` everywhere', async () => {
+    const { text } = await siteTypes();
+    match(text, /^export type Singleton = never;$/m);
+    const consumer = `import { createOhne } from '@ohnejs/client';
+import type { CMS } from './ohne.ts';
+
+const ohne = createOhne<CMS>({ api: 'https://cms.example.com' });
+
+export async function titles(uuid: string): Promise<string[]> {
+  const page = await ohne.read('Pages', uuid);
+  const { records } = await ohne.list('Pages');
+  // @ts-expect-error - \`Pages\` is no singleton
+  await ohne.read('Pages');
+  return [page?.title ?? '', ...records.map((record) => record.title)];
+}
+`;
+    strictEqual(compile(text, consumer), '');
   });
 });
 
@@ -431,16 +550,16 @@ export default defineField({
   it('leaves out what an anonymous reader cannot resolve', async () => {
     const text = await (await fetch(`http://127.0.0.1:${app.port}/cms/types.ts`)).text();
     match(text, /^ {4}Pages: \{/m);
-    for (const hidden of [
-      'Members',
-      'salaryBand',
-      'HR only',
-      'Internal',
-      'escalationPhone',
-      'Staff',
-    ]) {
+    for (const hidden of ['Members', 'salaryBand', 'HR only', 'Internal', 'escalationPhone']) {
       ok(!text.includes(hidden), hidden);
     }
+  });
+
+  it('types a public collection only a refused page links to as a record alone', async () => {
+    const { text } = await siteTypes();
+    const records = text.indexOf('export interface Records {');
+    ok(!text.slice(0, records).includes('Staff'));
+    deepStrictEqual(members(text.slice(records), 'Staff', 2), ['UUID', '_updatedAt', 'name']);
   });
 
   it('aliases an imported type named like one of its own', async () => {
@@ -485,6 +604,12 @@ export default defineCollection({
   api: { read: { public: true, access: () => ({ select: ['UUID', 'title'] }) } },
 });
 `,
+  'collections/Brands.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: { name: field('text') },
+  api: { read: { public: true, access: () => ({ select: ['name'] }) } },
+});
+`,
   'collections/Vault.ts': `import { defineCollection, field } from 'ohnejs';
 import { useUser } from 'ohnejs/auth';
 import { pageFields } from '@ohnejs/cms';
@@ -510,7 +635,17 @@ export default defineBlock({ fields: { escalationPhone: field('text') } });
 `,
 };
 
-const AUTHOR_CONSUMER = `import type { Page } from './ohne.ts';
+const AUTHOR_CONSUMER = `import { createOhne } from '@ohnejs/client';
+import type { CMS, Page } from './ohne.ts';
+
+const ohne = createOhne<CMS>({ api: 'https://cms.example.com' });
+
+export async function author(uuid: string): Promise<string> {
+  const record = await ohne.read('Authors', uuid);
+  // @ts-expect-error - the read access selects no \`email\`
+  await ohne.read('Authors', uuid, { select: ['email'] });
+  return record?.name ?? '';
+}
 
 export function byline(page: Page<'Pages'>): string {
   return page.author?.name ?? '';
@@ -568,6 +703,19 @@ describe('site types under read access', () => {
     deepStrictEqual(members(text, 'Guides', 4), ['UUID', 'title']);
   });
 
+  it('narrows a record to the fields its access selects, with no path past a withheld slug', async () => {
+    const { text } = await siteTypes();
+    const records = text.slice(text.indexOf('export interface Records {'));
+    deepStrictEqual(members(records, 'Authors', 2), ['UUID', 'name']);
+    deepStrictEqual(members(records, 'Guides', 2), ['UUID', 'title']);
+  });
+
+  it('keeps `UUID` on a record whose access withholds it', async () => {
+    const { text } = await siteTypes();
+    const records = text.slice(text.indexOf('export interface Records {'));
+    deepStrictEqual(members(records, 'Brands', 2), ['UUID', 'name']);
+  });
+
   it('keeps every field of an unnarrowed page', async () => {
     const { text } = await siteTypes();
     const page = members(text, 'Pages', 4);
@@ -604,6 +752,199 @@ describe('site types under read access', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+const CREATE = {
+  ...PLAIN,
+  'middleware/spam.ts': `import { defineMiddleware, forbidden } from 'ohnejs';
+export default defineMiddleware((event) =>
+  event.request.headers.get('spam-token') === 'ok' ? undefined : forbidden('The spam check failed.'),
+);
+`,
+  'collections/Messages.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: {
+    name: field('text'),
+    email: field('email'),
+    topic: field('select', { choices: ['sales', 'support'], nullable: true }),
+    tags: field('multiSelect', { choices: ['a', 'b'] }),
+    picks: field('multiSelect', { choices: ['a', 'b'], min: 1 }),
+    priority: field('integer', { default: 1 }),
+    reference: field('text', { immutable: true }),
+    note: field('text', { readable: false }),
+    status: field('text', { writable: false, nullable: true }),
+    page: field('link', { collections: ['Pages'], nullable: true }),
+    author: field('record', { collection: 'Authors' }),
+    cc: field('records', { collection: 'Authors' }),
+    to: field('records', { collection: 'Authors', min: 1 }),
+  },
+  api: { create: { public: true, middleware: ['spam'] } },
+});
+`,
+  'collections/Signups.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: {
+    email: field('email'),
+    address: field('object', { fields: { city: field('text') } }),
+    items: field('repeater', { fields: { label: field('text') } }),
+    body: field('blocks', { allow: ['Note'] }),
+  },
+  api: { create: { public: true, access: () => true } },
+});
+`,
+  'blocks/Note.ts': `import { defineBlock, field } from 'ohnejs';
+export default defineBlock({ fields: { text: field('text') } });
+`,
+  'collections/Authors.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({
+  fields: { name: field('text') },
+  api: { read: 'public', create: true },
+});
+`,
+  'collections/Uploads.ts': `import { defineCollection } from 'ohnejs';
+import uploads from '../node_modules/ohnejs/src/uploads/collections/Uploads.ts';
+export default defineCollection({ ...uploads, api: { ...uploads.api, create: 'public' } });
+`,
+};
+
+const CREATE_CONSUMER = `import { createOhne } from '@ohnejs/client';
+import type { Creatable, CMS } from './ohne.ts';
+
+const ohne = createOhne<CMS>({ api: 'https://cms.example.com' });
+
+export async function send(message: Creatable['Messages']): Promise<string> {
+  const result = await ohne.create('Messages', message, { headers: { 'spam-token': 'ok' } });
+  if (result.ok) return result.UUID ?? '';
+  const email: string | undefined = result.errors.email;
+  return email ?? result.message;
+}
+
+export async function misuse(author: string): Promise<void> {
+  await ohne.create('Messages', { name: 'Ada', email: 'ada@example.com', picks: ['a'], reference: 'r', note: 'n', to: [author] });
+  await ohne.create('Signups', { email: 'ada@example.com', address: { city: 'Vienna' } });
+  // @ts-expect-error - \`to\` takes at least one author
+  await ohne.create('Messages', { name: 'Ada', email: 'ada@example.com', picks: ['a'], reference: 'r', note: 'n' });
+  // @ts-expect-error - a create takes no \`status\`
+  await ohne.create('Messages', { name: 'Ada', email: 'ada@example.com', picks: ['a'], reference: 'r', note: 'n', to: [author], status: 'x' });
+  // @ts-expect-error - \`picks\` takes only its choices
+  await ohne.create('Messages', { name: 'Ada', email: 'ada@example.com', picks: ['c'], reference: 'r', note: 'n', to: [author] });
+  // @ts-expect-error - a visitor may not create in \`Authors\`
+  await ohne.create('Authors', { name: 'Ada' });
+  // @ts-expect-error - a file goes up through the uploads routes
+  await ohne.create('Uploads', {});
+  // @ts-expect-error - \`Site\` holds one record
+  await ohne.create('Site', {});
+}
+`;
+
+describe('site types for creates', () => {
+  let app: TestApp;
+
+  before(async () => {
+    app = await startApp(CREATE);
+  });
+
+  after(async () => {
+    await app.stop();
+  });
+
+  it('holds each collection whose create is public, middleware and `access` aside', async () => {
+    const { text } = await siteTypes();
+    const creatable = text.slice(text.indexOf('export interface Creatable {'));
+    deepStrictEqual(
+      [...creatable.matchAll(/^ {2}(\w+): \{$/gm)].map(([, name]) => name).slice(0, 2),
+      ['Messages', 'Signups'],
+    );
+    match(creatable, /^ {2}\};\n\}\n\n\/\*\*\n \* What this cms answers a website/m);
+    match(text, /^ {2}creatable: Creatable;$/m);
+    const records = text.slice(text.indexOf('export interface Records {'), text.indexOf(creatable));
+    ok(!records.includes('Messages'));
+  });
+
+  it('takes the fields a create writes, `immutable` and write-only ones included', async () => {
+    const { text } = await siteTypes();
+    const creatable = text.slice(text.indexOf('export interface Creatable {'));
+    deepStrictEqual(members(creatable, 'Messages', 2), [
+      'name',
+      'email',
+      'topic',
+      'tags',
+      'picks',
+      'priority',
+      'reference',
+      'note',
+      'page',
+      'author',
+      'cc',
+      'to',
+    ]);
+    for (const line of [
+      'name: string;',
+      "topic?: 'sales' | 'support' | null;",
+      "tags?: ('a' | 'b')[];",
+      "picks: ('a' | 'b')[];",
+      'priority?: number;',
+      "page?: Link<'Pages'> | null;",
+      'author?: string | null;',
+      'cc?: string[];',
+      'to: string[];',
+      'address: unknown;',
+      'items?: unknown;',
+      'body?: unknown;',
+    ]) {
+      ok(creatable.includes(`    ${line}\n`), line);
+    }
+  });
+
+  it('agrees with the framework on what a create needs', () => {
+    const dir = writeApp({
+      ...CREATE,
+      'ohne.config.ts': PLAIN['ohne.config.ts'].replace(
+        "cms: { routes: { Pages: '/[...slug]' } }",
+        "cms: { routes: { Pages: '/[...slug]' }, types: 'ohne.ts' }",
+      ),
+    });
+    try {
+      strictEqual(ohne(dir, 'prepare').status, 0);
+      const consumer = `import type { GeneratedInserts } from './.ohne/shared/database.ts';
+import type { Creatable } from './ohne.ts';
+
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+type Optional<T> = { [K in keyof T]-?: {} extends Pick<T, K> ? K : never }[keyof T];
+
+export const messages: Same<Creatable['Messages'], GeneratedInserts['Messages']> = true;
+export const keys: Same<keyof Creatable['Signups'], keyof GeneratedInserts['Signups']> = true;
+export const omitted: Same<Optional<Creatable['Signups']>, Optional<GeneratedInserts['Signups']>> = true;
+`;
+      strictEqual(typecheck(dir, consumer), '');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('compiles a create for a website, and rejects a misuse', async () => {
+    strictEqual(compile((await siteTypes()).text, CREATE_CONSUMER), '');
+  });
+
+  it('lets a create through with only the fields it requires', async () => {
+    const { UUID: author } = await queryUntyped('Authors').createOrThrow({ name: 'Ada' });
+    const input = {
+      name: 'Ada',
+      email: 'ada@example.com',
+      picks: ['a'],
+      reference: 'r',
+      note: 'n',
+      to: [author],
+    };
+    const post = (headers: Record<string, string>) =>
+      fetch(`http://127.0.0.1:${app.port}/collections/messages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify(input),
+      });
+    strictEqual((await post({})).status, 403);
+    strictEqual((await post({ 'spam-token': 'ok' })).status, 201);
   });
 });
 

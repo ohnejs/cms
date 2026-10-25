@@ -92,7 +92,7 @@ export function absolute(path: string): string {
  */
 async function siteIn(locale: string): Promise<QueryRecord> {
   const site = (await queryUntyped('Site').locale(locale).findFirst()) ?? {};
-  await loadRelations(site, 'Site', locale);
+  await loadRelations([site], 'Site', locale);
   return site;
 }
 

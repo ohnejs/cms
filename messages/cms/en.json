@@ -1,6 +1,7 @@
 {
   "api": {
-    "invalidPath": "`path` must be a site path starting with `/`"
+    "invalidPath": "`path` must be a site path starting with `/`",
+    "unsupportedParam": "Param `{param}` is not supported here"
   },
   "fields": {
     "slug": {

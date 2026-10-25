@@ -21,7 +21,7 @@ import {
   uniqueArray,
 } from 'ohnejs/utils';
 
-import { type CMSRoute, routePath, routesIn } from './routes.ts';
+import { type CMSRoute, routePath, routesIn, setPaths } from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
 
 /**
@@ -56,7 +56,8 @@ interface Slot {
 }
 
 /**
- * Loads every relation of a page record one level deep, at the top and inside its blocks and composites.
+ * Loads every relation of `records` one level deep, at the top and inside their blocks and composites.
+ * One read per target collection serves every record, so a page of records costs what one record does.
  * A relation reads as its reader may read the target, so a draft or a hidden record stays out.
  * Public uploads load whatever the reader's role, since their files are public already; private ones never do.
  * A loaded upload carries only what a site renders it with, and its URLs become absolute.
@@ -66,13 +67,14 @@ interface Slot {
  * A record link carries `href`, its target's path, when the reader can open that page.
  */
 export async function loadRelations(
-  record: QueryRecord,
+  records: readonly QueryRecord[],
   collection: string,
   locale: string,
 ): Promise<void> {
   const slots: Slot[] = [];
   const links: RecordLink[] = [];
-  collect(record, queryMetadata(collection).fields, slots, links);
+  const fields = queryMetadata(collection).fields;
+  for (const record of records) collect(record, fields, slots, links);
   const wanted = new Map<string, Set<string>>();
   for (const slot of slots) {
     const ids = wanted.get(slot.target) ?? new Set<string>();
@@ -201,13 +203,7 @@ async function readTargets(
     target === 'Uploads'
       ? await readPublicUploads(ids, locale)
       : await readScoped(target, ids, locale);
-  const route = routesIn(locale).find((entry) => entry.collection === target);
-  if (!isUndefined(route)) {
-    for (const record of records) {
-      const path = routePath(route, isString(record.slug) ? record.slug : undefined);
-      if (!isUndefined(path)) record.path = path;
-    }
-  }
+  setPaths(records, target, locale);
   return new Map(records.map((record) => [record.UUID as string, record]));
 }
 

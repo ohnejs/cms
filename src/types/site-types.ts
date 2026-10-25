@@ -2,10 +2,12 @@ import type {
   CollectedCollection,
   EmittableFieldType,
   FieldInstance,
+  FieldJSONType,
   ForeignKeyHint,
   JunctionHint,
   QueryScope,
   ShapeMember,
+  ShapeScalarArgs,
 } from 'ohnejs';
 
 import {
@@ -17,6 +19,7 @@ import {
   ohneError,
   queryMetadata,
   readShapeType,
+  resolveFieldOptions,
   runWithoutEvent,
   stackedLayers,
   useConfig,
@@ -26,7 +29,16 @@ import {
 } from 'ohnejs';
 import { readScope } from 'ohnejs/auth';
 import { hasImageService, useUploadsConfig } from 'ohnejs/uploads';
-import { errorMessage, hashText, isUndefined, pick, relativePath, uniqueArray } from 'ohnejs/utils';
+import {
+  errorMessage,
+  hasKey,
+  hashText,
+  isNumber,
+  isUndefined,
+  pick,
+  relativePath,
+  uniqueArray,
+} from 'ohnejs/utils';
 import {
   type CodeBuilder,
   createCodeBuilder,
@@ -40,7 +52,7 @@ import {
 
 import pkg from '../../package.json' with { type: 'json' };
 import { UPLOAD_FIELDS } from '../relations.ts';
-import { isHome, routesIn } from '../routes.ts';
+import { type CMSRoute, isHome, routesIn } from '../routes.ts';
 import { clientMirror } from './mirror.ts';
 
 /**
@@ -133,6 +145,9 @@ interface SiteModel {
   blocks: Map<string, Member[]>;
   relatedBlocks: Map<string, Member[]>;
   related: Map<string, Member[]>;
+  records: Map<string, Member[]>;
+  singletons: string[];
+  creatable: Map<string, Member[]>;
   pages: Map<string, Member[]>;
   notFound: string[];
 }
@@ -146,6 +161,9 @@ const DECLARED = [
   'RelatedBlocks',
   'RelatedBlock',
   'Related',
+  'Records',
+  'Singleton',
+  'Creatable',
   'CMS',
   'Page',
 ];
@@ -160,13 +178,17 @@ const PATH_DOC = jsdocBlock("The record's page path, when it has a page in this 
  * Renders the types a website imports to read this cms, as an anonymous reader resolves its pages.
  *
  * `CMS` describes everything a resolve returns; `Page`, `Block`, `Related` and `Upload` name its parts.
- * A page and its blocks carry each relation loaded one hop out: `Related[X]`, or `Upload` for a file.
+ * `Records` holds each collection a visitor may read but `Uploads`, as `GET /cms/records` answers it.
+ * `Singleton` names those of them that hold one record.
+ * `Creatable` holds each collection a visitor may create a record in, with the fields a create takes.
+ * A page, a record and their blocks carry relations loaded one hop out: `Related[X]`, or `Upload` for a file.
  * A related record keeps its own relations as `UUID`s, its uploads aside.
  * Each collection's read access is asked as a visitor without a session, exactly as a resolve asks it.
  * A refused collection with pages is left out, its blocks and targets with it.
  * So is one whose read runs middleware, which cannot run without a request, and `guarded` names it.
  * A refused target is `Record<string, unknown>`.
  * A scope's `select` narrows a shape to the named fields, `UUID`, `_updatedAt` and `_translations` included.
+ * A `Records` shape keeps its `UUID` regardless, as `GET /cms/records` always answers it.
  * A `readable: false` field drops at every depth.
  * A field type whose JSON form is unknown reads `unknown`, and `degraded` names it.
  * `fresh` re-imports the app's definitions past the module cache, so a long-lived process reads its edits.
@@ -218,6 +240,22 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
         ];
       }),
   );
+  const records = new Map(
+    [...reach.keys()]
+      .filter((name) => name !== 'Uploads')
+      .sort()
+      .map((name) => {
+        const { select } = reach.get(name)!;
+        const shown = isUndefined(select) ? select : [...select, 'UUID'];
+        return [
+          name,
+          [
+            ...systemMembers(name, 'page', carriesPath(routes, name, select), shown),
+            ...walker.walk(definitions.get(name)!, 'page', select),
+          ],
+        ];
+      }),
+  );
   const pageBlocks = walker.walkBlocks('page', blockDefinitions);
   const related = new Map(
     [...walker.targets].sort().map((name) => {
@@ -225,7 +263,7 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
       return [
         name,
         [
-          ...systemMembers(name, 'related', routed.includes(name), select),
+          ...systemMembers(name, 'related', carriesPath(routes, name, select), select),
           ...walker.walk(definitions.get(name)!, 'related', select),
         ],
       ];
@@ -246,6 +284,9 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
     blocks: pageBlocks,
     relatedBlocks,
     related,
+    records,
+    singletons: [...records.keys()].filter((name) => queryMetadata(name).singleton === true),
+    creatable: creatableIn(collections, walker, definitions),
     pages,
     notFound: uniqueArray(routes.filter(isHome).map((route) => route.collection))
       .filter((name) => pages.has(name))
@@ -257,7 +298,7 @@ export async function siteTypes({ fresh = false }: { fresh?: boolean } = {}): Pr
   const schema = hashText(body).toString(16).padStart(8, '0');
   const banner = [
     `// Generated by @ohnejs/cms ${pkg.version} on ohne ${version} - protocol 1 - locales ${locales.join(',')}${service} - schema ${schema}. Do not edit.`,
-    '// Describes `GET /cms/routes/resolve` for an anonymous reader. Relations load one hop out. Upload URLs are absolute.',
+    '// Describes `GET /cms/routes/resolve`, `GET /cms/records` and `POST /collections` for a visitor without a session. Relations load one hop out. Upload URLs are absolute.',
   ];
   return {
     text: `${banner.join('\n')}\n${body}`,
@@ -373,6 +414,20 @@ function createWalker(
     return hint.kind === 'junction' ? `${type}[]` : `${type} | null`;
   };
 
+  const json = (definition: Definition, args: ShapeScalarArgs): FieldJSONType => {
+    const type = fieldJSONType({ ...args, mirror: clientMirror });
+    if (isUndefined(type.reason)) return type;
+    const entry = degraded.get(args.type) ?? {
+      type: args.type,
+      reason: type.reason,
+      file: types.get(args.type)?.file,
+      fields: [],
+    };
+    entry.fields = uniqueArray([...entry.fields, `${definition.name}.${args.path}`]);
+    degraded.set(args.type, entry);
+    return type;
+  };
+
   const walk = (definition: Definition, depth: Depth, select?: readonly string[]): ShapeMember[] =>
     readShapeType(
       { subject: `${definition.subject} \`${definition.name}\``, file: definition.file },
@@ -384,19 +439,7 @@ function createWalker(
         nested: definition.subject === 'Block',
         dropHidden: 'always',
         docs: 'site',
-        scalar: (args) => {
-          const json = fieldJSONType({ ...args, mirror: clientMirror });
-          if (isUndefined(json.reason)) return json;
-          const entry = degraded.get(args.type) ?? {
-            type: args.type,
-            reason: json.reason,
-            file: types.get(args.type)?.file,
-            fields: [],
-          };
-          entry.fields = uniqueArray([...entry.fields, `${definition.name}.${args.path}`]);
-          degraded.set(args.type, entry);
-          return json;
-        },
+        scalar: (args) => json(definition, args),
         relation: ({ hint }) => relationType(hint, depth),
         blocksType: ({ allowed }) => {
           for (const block of allowed) reached[depth].add(block);
@@ -418,12 +461,137 @@ function createWalker(
     return new Map([...shapes].sort(([a], [b]) => a.localeCompare(b)));
   };
 
-  return { walk, walkBlocks, targets, degraded };
+  const walkInput = (definition: Definition): Member[] => {
+    const fields = Object.fromEntries(
+      Object.entries(definition.fields).filter(([, instance]) => {
+        const registered = types.get(instance.type);
+        if (isUndefined(registered)) return true;
+        return (
+          resolveFieldOptions(registered.fieldType, { ...instance.options }).writable !== false
+        );
+      }),
+    );
+    const bases = new Map<string, string>();
+    const docs = readShapeType(
+      { subject: `Collection \`${definition.name}\``, file: definition.file },
+      fields,
+      {
+        types,
+        blocks,
+        imports,
+        docs: 'site',
+        scalar: (args) => {
+          if (args.path !== args.name) return { base: 'unknown', nullable: false };
+          const type = json(definition, args);
+          bases.set(args.name, type.base);
+          return type;
+        },
+        relation: () => 'string',
+        blocksType: () => 'unknown',
+      },
+    );
+    return docs.map(({ name, doc }) => ({
+      name,
+      doc,
+      ...inputType(name, fields[name]!, types.get(fields[name]!.type)!.fieldType, bases.get(name)),
+    }));
+  };
+
+  return { walk, walkBlocks, walkInput, targets, degraded };
+}
+
+/**
+ * Each collection a visitor may create a record in, mapped to the fields a create takes.
+ * Its create is exposed `public`, since a site's request carries no session.
+ * A singleton and `Uploads` take no create from a site, so they are left out.
+ * Create middleware and a create `access` judge each request, so neither leaves a collection out.
+ */
+function creatableIn(
+  collections: readonly CollectedCollection[],
+  walker: ReturnType<typeof createWalker>,
+  definitions: ReadonlyMap<string, Definition>,
+): Map<string, Member[]> {
+  return new Map(
+    collections
+      .filter(
+        ({ name, collection }) =>
+          endpointOf(collection.api, 'create')?.public === true &&
+          name !== 'Uploads' &&
+          queryMetadata(name).singleton !== true,
+      )
+      .map(({ name }) => name)
+      .sort()
+      .map((name) => [name, walker.walkInput(definitions.get(name)!)]),
+  );
+}
+
+/**
+ * The type one top-level field takes in a create, and whether a create may omit it.
+ * It follows the framework's own create input, so the site and the API agree on what a create needs.
+ * A column takes its JSON type `base`, a `record` a `UUID`, a `records` list its `UUID`s.
+ * A composite or blocks field takes `unknown`, which the API validates.
+ */
+function inputType(
+  name: string,
+  instance: FieldInstance,
+  fieldType: EmittableFieldType['fieldType'],
+  base = 'unknown',
+): { type: string; optional: boolean } {
+  const options = resolveFieldOptions(fieldType, { ...instance.options });
+  const hint = fieldType.schema?.({ name, options });
+  const listOptional =
+    hasKey(options, 'default') || hasKey(options, 'when') || !forbidsEmpty(options);
+  if (hint?.kind === 'junction') return { type: 'string[]', optional: listOptional };
+  if (hint?.kind === 'blocks' || (hint?.kind === 'child' && hint.cardinality === 'many')) {
+    return { type: 'unknown', optional: listOptional };
+  }
+  const nullable = options.nullable === true;
+  const optional = nullable || columnDefaulted(options, fieldType);
+  if (hint?.kind === 'child') return { type: 'unknown', optional };
+  const type = hint?.kind === 'foreignKey' ? 'string' : base;
+  return { type: nullable ? `${type} | null` : type, optional };
+}
+
+/**
+ * Whether a column field is defaulted: by its own `default`, or by its type's `defaultValue`.
+ * A `jsonList` type's default is its empty list, which a field that `forbidsEmpty` cannot take, unless gated.
+ */
+function columnDefaulted(
+  options: Readonly<Record<string, unknown>>,
+  fieldType: { defaultValue?: unknown; jsonList?: true },
+): boolean {
+  if (hasKey(options, 'default')) return true;
+  if (isUndefined(fieldType.defaultValue)) return false;
+  return !(fieldType.jsonList === true && forbidsEmpty(options)) || hasKey(options, 'when');
+}
+
+/**
+ * Whether a list field's options rule out the empty list: `allowEmpty: false`, or a `min` of at least 1.
+ */
+function forbidsEmpty(options: Readonly<Record<string, unknown>>): boolean {
+  return options.allowEmpty === false || (isNumber(options.min) && options.min >= 1);
+}
+
+/**
+ * Whether a record of `collection` can carry a `path`: it has a route its `select` can fill.
+ * A route with a param reads `slug`, which the access may withhold.
+ * A read never widens past the access, so a withheld `slug` leaves such a route no `path`.
+ */
+function carriesPath(
+  routes: readonly CMSRoute[],
+  collection: string,
+  select?: readonly string[],
+): boolean {
+  return routes.some(
+    (route) =>
+      route.collection === collection &&
+      (route.match.params.length === 0 || isUndefined(select) || select.includes('slug')),
+  );
 }
 
 /**
  * The members every record of `collection` carries besides its fields, those outside `select` left out.
- * A related record of a collection with pages carries a `path` in a locale where it has one.
+ * A `routed` record, related or read by itself, carries a `path` in a locale where it has one.
  */
 function systemMembers(
   collection: string,
@@ -549,17 +717,48 @@ function render(imports: TypeImports, model: SiteModel): string {
       ].join('\n'),
     );
   }
-  code.line(jsdocBlock('Each record a page loads one hop out, its own relations as `UUID`s.'));
+  code.line(
+    jsdocBlock('Each record a page or a record loads one hop out, its own relations as `UUID`s.'),
+  );
   emitShapes(
     code,
     'export interface Related',
     '',
     model.related,
-    (name) => `A record of \`${name}\` as a page loads it.`,
+    (name) => `A record of \`${name}\` as it loads one hop out.`,
+  );
+  code.line();
+  code.line(
+    jsdocBlock('Each collection a visitor may read, its record as `GET /cms/records` answers it.'),
+  );
+  emitShapes(
+    code,
+    'export interface Records',
+    '',
+    model.records,
+    (name) => `A record of \`${name}\` as a visitor reads it, relations loaded one hop out.`,
+  );
+  code.line();
+  declare(
+    code,
+    'The collections in `Records` that hold one record.',
+    `export type Singleton = ${literalUnion(model.singletons)};`,
+  );
+  code.line(
+    jsdocBlock(
+      'Each collection a visitor may create a record in, with the fields a create takes.\nA composite or blocks field takes `unknown`, which the API validates.',
+    ),
+  );
+  emitShapes(
+    code,
+    'export interface Creatable',
+    '',
+    model.creatable,
+    (name) => `The fields a create in \`${name}\` takes.`,
   );
   code.line();
   const notFound = model.notFound.map((name) => `CMS['pages'][${literalString(name)}]`);
-  code.line(jsdocBlock('What this cms resolves, for `createOhne<CMS>`.'));
+  code.line(jsdocBlock('What this cms answers a website, for `createOhne<CMS>`.'));
   code.line('export interface CMS {');
   code.indent(() => {
     code.line(jsdocBlock('The resolve protocol this file describes.')).line('protocol: 1;').line();
@@ -576,7 +775,15 @@ function render(imports: TypeImports, model: SiteModel): string {
     code.line(
       jsdocBlock("The page a path no route answers carries: the `[...slug]` route's `404` record."),
     );
-    code.line(`notFound: ${notFound.length === 0 ? 'never' : notFound.join(' | ')};`);
+    code.line(`notFound: ${notFound.length === 0 ? 'never' : notFound.join(' | ')};`).line();
+    code.line(jsdocBlock('Each collection a visitor may read, for `read` and `list`.'));
+    code.line('records: Records;').line();
+    code.line(
+      jsdocBlock('The collections that hold one record, which `read` takes without a `UUID`.'),
+    );
+    code.line('singletons: Singleton;').line();
+    code.line(jsdocBlock('Each collection a visitor may create a record in, for `create`.'));
+    code.line('creatable: Creatable;');
   });
   code.line('}').line();
   code.line(jsdocBlock('A record of collection `C` as its page resolves it.'));
