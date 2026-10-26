@@ -62,6 +62,16 @@ export interface ShareSummary {
   path: string;
 
   /**
+   * The last characters of the link's token, the end of the URL an editor sent.
+   */
+  tokenHint: string;
+
+  /**
+   * When the link was made, in epoch milliseconds.
+   */
+  createdAt: number;
+
+  /**
    * When the link stops working, in epoch milliseconds.
    */
   expiresAt: number;
@@ -76,6 +86,8 @@ export interface ShareSummary {
    */
   mine: boolean;
 }
+
+const TOKEN_HINT_LENGTH = 4;
 
 /**
  * Freezes the caller's unsaved state of a record into a link anyone may open until it expires.
@@ -103,6 +115,7 @@ export async function createShare(
   const expiresAt = Date.now() + parseDuration(duration);
   const { UUID } = await queryUntyped('CMSShares').createOrThrow({
     tokenHash: hashToken(token),
+    tokenHint: token.slice(-TOKEN_HINT_LENGTH),
     collection,
     record,
     locale,
@@ -163,6 +176,9 @@ export async function sharesOf(collection: unknown, record: unknown): Promise<Sh
     UUID: row.UUID as string,
     locale: row.locale as string,
     path: row.path as string,
+    tokenHint: row.tokenHint as string,
+    // A share is never updated, so its `_updatedAt` is when it was made.
+    createdAt: row._updatedAt as number,
     expiresAt: row.expiresAt as number,
     user: emails.get(row.user as string) ?? null,
     mine: row.user === user,

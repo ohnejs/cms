@@ -87,6 +87,7 @@
       "copyFailed": "Link nije moguće kopirati",
       "create": "Kreiraj link",
       "createFailed": "Link nije moguće kreirati",
+      "created": "Kreiran `{when}`",
       "expires": "Ističe `{when}`",
       "expiresAfter": "Ističe nakon",
       "gone": "Uklonjen račun",

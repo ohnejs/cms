@@ -231,11 +231,14 @@ describe('preview shares', () => {
       UUID: created.UUID,
       locale: 'en',
       path: '/about',
+      tokenHint: created.token.slice(-4),
+      createdAt: body[0].createdAt,
       expiresAt: created.expiresAt,
       user: 'ada@example.com',
       mine: true,
     });
     strictEqual('token' in body[0], false);
+    strictEqual(Math.abs(created.expiresAt - 3_600_000 - body[0].createdAt) < 5_000, true);
 
     const bob = (await list(await signIn('bob@example.com'))).body;
     strictEqual(bob.find((row: any) => row.UUID === created.UUID).mine, false);

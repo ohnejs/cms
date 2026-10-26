@@ -87,6 +87,7 @@
       "copyFailed": "Could not copy the link",
       "create": "Create link",
       "createFailed": "Could not create the link",
+      "created": "Created `{when}`",
       "expires": "Expires `{when}`",
       "expiresAfter": "Expires after",
       "gone": "Removed account",

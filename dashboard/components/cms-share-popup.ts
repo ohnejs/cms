@@ -1,4 +1,4 @@
-import type { Popup, Primitive } from 'ohnejs/dashboard';
+import type { IconName, Popup, Primitive } from 'ohnejs/dashboard';
 
 import {
   api,
@@ -60,6 +60,8 @@ interface ShareRow {
   UUID: string;
   locale: string;
   path: string;
+  tokenHint: string;
+  createdAt: number;
   expiresAt: number;
   user: string | null;
   mine: boolean;
@@ -100,6 +102,10 @@ css`
     min-width: 0;
   }
 
+  .o-cms-share-row-hint {
+    font-family: var(--ohne-font-mono);
+  }
+
   .o-cms-share-row-meta {
     gap: 0.75rem;
     font-size: 0.75rem;
@@ -114,7 +120,8 @@ css`
 /**
  * The share popup: freezes the editor's unsaved page into a link anyone may open until it expires.
  * The editor picks a lifetime out of `cms.share.durations` and creates the link, which shows once to copy.
- * Below it, every live link of the record lists with its locale, path, expiry, and creator, each revocable.
+ * Below it, every live link of the record lists with its locale, path, token end, age, expiry, and creator.
+ * Each one is revocable.
  * The draft is read as the popup opens, so a link holds exactly what the preview showed then.
  * Create it inside a reactive region; dispose the region after `onClose`'s close resolves.
  */
@@ -203,17 +210,20 @@ export function sharePopup(options: SharePopupOptions): Popup {
       disabled: () => !isUndefined(revoking.value),
       onClick: () => void revoke(entry.UUID),
     });
-    const expires = h(
-      'span',
-      { class: 'ohne-row' },
-      icon('clock'),
-      h('span', { class: 'ohne-truncate' }, () => formatRelative(entry.expiresAt)),
-    );
-    onCleanup(
-      attachTooltip(expires, () =>
-        t('cms.liveView.share.expires', { when: formatDateTime(entry.expiresAt) }),
-      ),
-    );
+    const stamp = (
+      name: IconName,
+      timestamp: number,
+      key: 'cms.liveView.share.created' | 'cms.liveView.share.expires',
+    ): HTMLElement => {
+      const el = h(
+        'span',
+        { class: 'ohne-row' },
+        icon(name),
+        h('span', { class: 'ohne-truncate' }, () => formatRelative(timestamp)),
+      );
+      onCleanup(attachTooltip(el, () => t(key, { when: formatDateTime(timestamp) })));
+      return el;
+    };
     const multilingual = (dashboardMeta()?.locales.length ?? 0) > 1;
     return h(
       'div',
@@ -228,11 +238,17 @@ export function sharePopup(options: SharePopupOptions): Popup {
             ? h('span', { class: 'ohne-shrink-0 ohne-muted' }, formatLocaleCode(entry.locale))
             : null,
           h('span', { class: 'ohne-truncate' }, entry.path),
+          h(
+            'span',
+            { class: 'o-cms-share-row-hint ohne-shrink-0 ohne-muted' },
+            `…${entry.tokenHint}`,
+          ),
         ),
         h(
           'div',
           { class: 'o-cms-share-row-meta ohne-row ohne-muted' },
-          expires,
+          stamp('calendar-plus', entry.createdAt, 'cms.liveView.share.created'),
+          stamp('clock', entry.expiresAt, 'cms.liveView.share.expires'),
           h(
             'span',
             { class: 'ohne-row' },
