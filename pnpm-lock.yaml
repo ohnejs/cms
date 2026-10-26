@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@ohnejs/client':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.0
+        version: 0.3.0
       '@types/node':
         specifier: 26.0.0
         version: 26.0.0
@@ -29,8 +29,8 @@ importers:
 
 packages:
 
-  '@ohnejs/client@0.2.0':
-    resolution: {integrity: sha512-a0T7bYEa/MnZMmOSTt5tafaUQOTsSpDoZOwbz0jqxv4m7zDyQWjd9mLk/ILi8HLpnb0K2fku6NTH/bgNjyLQ7A==}
+  '@ohnejs/client@0.3.0':
+    resolution: {integrity: sha512-f9xKnDVbw/9OvH7e0Iizfy1zpnNDiBxypSpRHJ6/XENi7yhVFDYe93FsgS54u4kJ7KGV7eH/kZ8LqPo5DQDcSQ==}
     engines: {node: '>=20.0.0'}
 
   '@oxfmt/binding-android-arm-eabi@0.55.0':
@@ -445,7 +445,7 @@ packages:
 
 snapshots:
 
-  '@ohnejs/client@0.2.0': {}
+  '@ohnejs/client@0.3.0': {}
 
   '@oxfmt/binding-android-arm-eabi@0.55.0':
     optional: true
