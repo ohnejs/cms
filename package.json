@@ -1,6 +1,6 @@
 {
   "name": "@ohnejs/cms",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Pages, routes, SEO and a live preview editor for ohne.",
   "homepage": "https://ohne.dev/docs/cms/setup",
   "license": "MIT",
@@ -43,7 +43,7 @@
   "devDependencies": {
     "@ohnejs/client": "0.3.0",
     "@types/node": "26.0.0",
-    "ohnejs": "0.4.0",
+    "ohnejs": "0.5.0",
     "oxfmt": "0.55.0",
     "oxlint": "1.70.0",
     "typescript": "7.0.2"
