@@ -1,0 +1,166 @@
+{
+  "api": {
+    "invalidPath": "`path` muss ein Pfad der Website sein, der mit `/` beginnt",
+    "unsupportedParam": "Der Parameter `{param}` wird hier nicht unterstützt"
+  },
+  "address": {
+    "home": "Startseite",
+    "leavesHome": "Sobald du speicherst, ist das nicht mehr die Startseite.",
+    "leavesNotFound": "Sobald du speicherst, zeigen fehlende Adressen einen einfachen Fehler.",
+    "notFound": "404-Seite",
+    "notFoundHint": "Wird für Adressen angezeigt, die es nicht gibt",
+    "openHome": "Aktuelle Startseite öffnen",
+    "openNotFound": "Aktuelle 404-Seite öffnen",
+    "own": "Eigene Adresse vergeben",
+    "reservedHome": "Diese Adresse gehört der Startseite. Um diese Seite zur Startseite zu machen, wähle sie unter Sonderseite.",
+    "reservedNotFound": "Diese Adresse gehört der 404-Seite. Um diese Seite zur 404-Seite zu machen, wähle sie unter Sonderseite.",
+    "special": "Sonderseite",
+    "taken": "Diese Adresse gehört zu [{title}]({href}). Gib dieser Seite eine andere Adresse.",
+    "takenHome": "[{title}]({href}) ist bereits die Startseite. Gib dieser Seite eine andere Adresse.",
+    "takenNotFound": "[{title}]({href}) ist bereits die 404-Seite. Gib dieser Seite eine andere Adresse."
+  },
+  "delete": {
+    "home": "Das ist die Startseite. Sobald du sie löschst, hat deine Website keine Startseite, bis du unter Sonderseite eine andere wählst.",
+    "notFound": "Das ist die 404-Seite. Sobald du sie löschst, zeigen fehlende Adressen einen einfachen Fehler, bis du unter Sonderseite eine andere wählst."
+  },
+  "fields": {
+    "slug": {
+      "label": "Adresse"
+    },
+    "status": {
+      "label": "Status",
+      "draft": "Entwurf",
+      "published": "Veröffentlicht"
+    },
+    "publishedAt": {
+      "label": "Veröffentlicht am",
+      "description": "Leer veröffentlicht sofort. Ein Zeitpunkt in der Zukunft veröffentlicht dann."
+    },
+    "expiresAt": {
+      "label": "Läuft ab am",
+      "description": "Leer läuft nie ab."
+    },
+    "seo": {
+      "label": "SEO",
+      "title": {
+        "label": "Titel"
+      },
+      "description": {
+        "label": "Beschreibung"
+      },
+      "image": {
+        "label": "Bild"
+      },
+      "noindex": {
+        "label": "Vor Suchmaschinen verbergen",
+        "description": "Suchmaschinen überspringen diese Seite, und die Sitemap lässt sie aus."
+      }
+    }
+  },
+  "home": {
+    "heldNotLive": "`{title}` ist die Startseite, aber Besucher können sie gerade nicht sehen.",
+    "missing": "Deine Website hat noch keine live geschaltete Startseite. Um diese Seite zur Startseite zu machen, wähle sie unter Sonderseite.",
+    "missingIn": "Deine Website hat in `{locale}` noch keine live geschaltete Startseite. Um diese Seite zur Startseite zu machen, wähle sie unter Sonderseite.",
+    "missingOther": "Deine Website hat noch keine live geschaltete Startseite. Mach unter Sonderseite eine andere Seite zur Startseite.",
+    "missingOtherIn": "Deine Website hat in `{locale}` noch keine live geschaltete Startseite. Mach unter Sonderseite eine andere Seite zur Startseite.",
+    "unpublished": "Das ist die Startseite, aber Besucher können sie gerade nicht sehen."
+  },
+  "validation": {
+    "slugNested": "Diese Adresse darf keinen Schrägstrich enthalten",
+    "path": "Beginne den Pfad mit einem Schrägstrich",
+    "target": "Nutze einen Pfad, der mit einem Schrägstrich beginnt, oder eine vollständige URL"
+  },
+  "liveView": {
+    "addAddress": "Füge eine Adresse hinzu, um die Seite hier zu sehen",
+    "addressTaken": "Diese Adresse gehört zu `{title}`. Gib dieser Seite eine eigene Adresse, um sie hier zu sehen.",
+    "blocks": "Blöcke",
+    "dimensions": "Abmessungen",
+    "fields": "Felder",
+    "fixAddress": "Korrigiere die Adresse, um die Seite hier zu sehen",
+    "noPreview": "Die Website erscheint hier, sobald eine Site festgelegt ist",
+    "preview": "Vorschau",
+    "reload": "Neu laden",
+    "share": {
+      "active": "Aktive Links",
+      "copied": "Link kopiert",
+      "copy": "Link kopieren",
+      "copyFailed": "Der Link konnte nicht kopiert werden",
+      "create": "Link erstellen",
+      "createFailed": "Der Link konnte nicht erstellt werden",
+      "expires": "Läuft `{when}` ab",
+      "expiresAfter": "Läuft ab nach",
+      "gone": "Gelöschtes Konto",
+      "intro": "Alle mit dem Link sehen diese Seite so, wie sie jetzt ist, samt ungespeicherter Änderungen, bis er abläuft. Spätere Änderungen erscheinen nicht.",
+      "link": "Link",
+      "none": "Keine aktiven Links",
+      "revoke": "Link widerrufen",
+      "revokeFailed": "Der Link konnte nicht widerrufen werden",
+      "title": "Vorschau teilen",
+      "you": "Du"
+    },
+    "silent": {
+      "client": "Lade den ohne-Client auf dieser Seite.",
+      "framing": "Erlaube diesem Dashboard, die Website einzubetten.",
+      "origin": "Prüfe, ob die Site-URL in deinen CMS-Einstellungen zur Website passt.",
+      "title": "Die Website hat nicht geantwortet"
+    },
+    "replacesRedirect": "Solange diese Seite live ist, ersetzt sie die Weiterleitung von `{from}` nach `{to}`."
+  },
+  "preview": {
+    "invalidDraft": "Ein Entwurf braucht eine geroutete `collection`, einen `record`, eine `locale` und seine `values`",
+    "invalidToken": "Dieses Vorschau-Token gehört nicht dir, oder es ist abgelaufen",
+    "notWritable": "Du darfst diesen Datensatz nicht ändern",
+    "signIn": "Melde dich an, um deine Website in der Vorschau zu sehen"
+  },
+  "share": {
+    "invalidDuration": "`duration` muss eine der Freigabedauern sein",
+    "invalidRecord": "Eine Freigabeliste braucht eine geroutete `collection` und einen `record`",
+    "notFound": "Dieser geteilte Link existiert nicht",
+    "unsaved": "Speichere den Datensatz, bevor du ihn teilst"
+  },
+  "site": {
+    "name": {
+      "label": "Name der Website"
+    },
+    "titleTemplate": {
+      "label": "Titelvorlage",
+      "description": "So lauten Seitentitel: `'{title}'` ist der Seitentitel, `'{site}'` der Name der Website."
+    },
+    "description": {
+      "label": "Standardbeschreibung"
+    },
+    "image": {
+      "label": "Standardbild beim Teilen"
+    },
+    "noindex": {
+      "label": "Website vor Suchmaschinen verbergen",
+      "description": "Jede Seite bittet Suchmaschinen, fernzubleiben, und robots.txt sperrt die Website."
+    },
+    "autoRedirect": {
+      "label": "Verschobene Seiten weiterleiten",
+      "description": "Ändert sich die Adresse einer live geschalteten Seite, schickt ihre alte Adresse Besucher zur neuen."
+    }
+  },
+  "redirects": {
+    "from": {
+      "label": "Von",
+      "description": "Der Pfad, den ein Besucher aufruft, etwa /alte-seite. Eine live geschaltete Seite unter diesem Pfad antwortet stattdessen."
+    },
+    "to": {
+      "label": "Nach",
+      "description": "Ein Pfad auf der Website, etwa /neue-seite, oder eine vollständige URL."
+    },
+    "code": {
+      "label": "Status",
+      "301": "301 Dauerhaft verschoben",
+      "302": "302 Gefunden",
+      "307": "307 Temporäre Weiterleitung",
+      "308": "308 Permanente Weiterleitung"
+    },
+    "forwardQuery": {
+      "label": "Query behalten",
+      "description": "Übernimmt ?query-Parameter in das Ziel."
+    },
+    "inactive": "Inaktiv, solange unter `{from}` eine live geschaltete Seite antwortet."
+  }
+}

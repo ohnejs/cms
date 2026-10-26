@@ -1,0 +1,166 @@
+{
+  "api": {
+    "invalidPath": "`path` mora biti putanja sajta koja počinje s `/`",
+    "unsupportedParam": "Parametar `{param}` ovdje nije podržan"
+  },
+  "address": {
+    "home": "Početna stranica",
+    "leavesHome": "Kada sačuvate, ovo više nije početna stranica.",
+    "leavesNotFound": "Kada sačuvate, nepostojeće adrese prikazuju običnu grešku.",
+    "notFound": "Stranica 404",
+    "notFoundHint": "Prikazuje se za adrese koje ne postoje",
+    "openHome": "Otvori trenutnu početnu stranicu",
+    "openNotFound": "Otvori trenutnu stranicu 404",
+    "own": "Dodijeli joj vlastitu adresu",
+    "reservedHome": "Ova adresa pripada početnoj stranici. Da ovu stranicu napravite početnom, odaberite je pod Posebna stranica.",
+    "reservedNotFound": "Ova adresa pripada stranici 404. Da ovu stranicu napravite stranicom 404, odaberite je pod Posebna stranica.",
+    "special": "Posebna stranica",
+    "taken": "Ova adresa pripada stranici [{title}]({href}). Dajte ovoj stranici drugu adresu.",
+    "takenHome": "[{title}]({href}) je već početna stranica. Dajte ovoj stranici drugu adresu.",
+    "takenNotFound": "[{title}]({href}) je već stranica 404. Dajte ovoj stranici drugu adresu."
+  },
+  "delete": {
+    "home": "Ovo je početna stranica. Kada je obrišete, vaš sajt nema početnu stranicu dok pod Posebna stranica ne odaberete drugu.",
+    "notFound": "Ovo je stranica 404. Kada je obrišete, nepostojeće adrese prikazuju običnu grešku dok pod Posebna stranica ne odaberete drugu."
+  },
+  "fields": {
+    "slug": {
+      "label": "Adresa"
+    },
+    "status": {
+      "label": "Status",
+      "draft": "Nacrt",
+      "published": "Objavljeno"
+    },
+    "publishedAt": {
+      "label": "Objavljuje se",
+      "description": "Prazno objavljuje odmah. Budući trenutak objavljuje tada."
+    },
+    "expiresAt": {
+      "label": "Ističe",
+      "description": "Prazno nikad ne ističe."
+    },
+    "seo": {
+      "label": "SEO",
+      "title": {
+        "label": "Naslov"
+      },
+      "description": {
+        "label": "Opis"
+      },
+      "image": {
+        "label": "Slika"
+      },
+      "noindex": {
+        "label": "Sakrij od pretraživača",
+        "description": "Pretraživači preskaču ovu stranicu, a sitemap je izostavlja."
+      }
+    }
+  },
+  "home": {
+    "heldNotLive": "`{title}` je početna stranica, ali je posjetioci trenutno ne mogu vidjeti.",
+    "missing": "Vaš sajt još nema aktivnu početnu stranicu. Da ovu stranicu napravite početnom, odaberite je pod Posebna stranica.",
+    "missingIn": "Vaš sajt još nema aktivnu početnu stranicu za `{locale}`. Da ovu stranicu napravite početnom, odaberite je pod Posebna stranica.",
+    "missingOther": "Vaš sajt još nema aktivnu početnu stranicu. Pod Posebna stranica napravite neku drugu stranicu početnom.",
+    "missingOtherIn": "Vaš sajt još nema aktivnu početnu stranicu za `{locale}`. Pod Posebna stranica napravite neku drugu stranicu početnom.",
+    "unpublished": "Ovo je početna stranica, ali je posjetioci trenutno ne mogu vidjeti."
+  },
+  "validation": {
+    "slugNested": "Ova adresa ne može sadržavati kosu crtu",
+    "path": "Počnite putanju kosom crtom",
+    "target": "Koristite putanju koja počinje kosom crtom ili punu URL adresu"
+  },
+  "liveView": {
+    "addAddress": "Dodajte adresu da biste ovdje vidjeli stranicu",
+    "addressTaken": "Ova adresa pripada stranici `{title}`. Dajte ovoj stranici vlastitu adresu da biste je ovdje vidjeli.",
+    "blocks": "Blokovi",
+    "dimensions": "Dimenzije",
+    "fields": "Polja",
+    "fixAddress": "Ispravite adresu da biste ovdje vidjeli stranicu",
+    "noPreview": "Sajt se ovdje prikazuje kada se postavi njegova adresa",
+    "preview": "Pretpregled",
+    "reload": "Ponovo učitaj",
+    "share": {
+      "active": "Aktivni linkovi",
+      "copied": "Link kopiran",
+      "copy": "Kopiraj link",
+      "copyFailed": "Link nije moguće kopirati",
+      "create": "Kreiraj link",
+      "createFailed": "Link nije moguće kreirati",
+      "expires": "Ističe `{when}`",
+      "expiresAfter": "Ističe nakon",
+      "gone": "Uklonjen račun",
+      "intro": "Svako s linkom vidi ovu stranicu kakva je sada, uključujući nesačuvane izmjene, dok link ne istekne. Kasnije izmjene se ne prikazuju.",
+      "link": "Link",
+      "none": "Nema aktivnih linkova",
+      "revoke": "Opozovi link",
+      "revokeFailed": "Link nije moguće opozvati",
+      "title": "Podijeli pretpregled",
+      "you": "Vi"
+    },
+    "silent": {
+      "client": "Učitajte ohne klijent na ovoj stranici.",
+      "framing": "Dozvolite ovom dashboardu da uokviri sajt.",
+      "origin": "Provjerite da li se URL sajta u vašim CMS postavkama poklapa sa sajtom.",
+      "title": "Sajt nije odgovorio"
+    },
+    "replacesRedirect": "Dok je aktivna, ova stranica zamjenjuje preusmjeravanje s `{from}` na `{to}`."
+  },
+  "preview": {
+    "invalidDraft": "Nacrt treba rutiranu `collection`, `record`, `locale` i svoje `values`",
+    "invalidToken": "Ovaj token za pretpregled nije vaš ili je istekao",
+    "notWritable": "Ne smijete mijenjati ovaj zapis",
+    "signIn": "Prijavite se da biste vidjeli pretpregled svog sajta"
+  },
+  "share": {
+    "invalidDuration": "`duration` mora biti jedno od trajanja dijeljenja",
+    "invalidRecord": "Lista dijeljenja treba rutiranu `collection` i `record`",
+    "notFound": "Ovaj dijeljeni link ne postoji",
+    "unsaved": "Sačuvajte zapis prije nego što ga podijelite"
+  },
+  "site": {
+    "name": {
+      "label": "Naziv sajta"
+    },
+    "titleTemplate": {
+      "label": "Šablon naslova",
+      "description": "Kako glase naslovi stranica: `'{title}'` je naslov stranice, `'{site}'` naziv sajta."
+    },
+    "description": {
+      "label": "Zadani opis"
+    },
+    "image": {
+      "label": "Zadana slika za dijeljenje"
+    },
+    "noindex": {
+      "label": "Sakrij sajt od pretraživača",
+      "description": "Svaka stranica traži od pretraživača da je zaobiđu, a robots.txt zatvara sajt."
+    },
+    "autoRedirect": {
+      "label": "Preusmjeri premještene stranice",
+      "description": "Kada se promijeni adresa aktivne stranice, njena stara adresa šalje posjetioce na novu."
+    }
+  },
+  "redirects": {
+    "from": {
+      "label": "Od",
+      "description": "Putanja koju posjetilac traži, npr. /stara-stranica. Aktivna stranica na ovoj putanji odgovara umjesto toga."
+    },
+    "to": {
+      "label": "Prema",
+      "description": "Putanja na sajtu, npr. /nova-stranica, ili puna URL adresa."
+    },
+    "code": {
+      "label": "Status",
+      "301": "301 Trajno premješteno",
+      "302": "302 Pronađeno",
+      "307": "307 Privremeno preusmjeravanje",
+      "308": "308 Trajno preusmjeravanje"
+    },
+    "forwardQuery": {
+      "label": "Zadrži query",
+      "description": "Prenosi ?query parametre na odredište."
+    },
+    "inactive": "Neaktivno dok na `{from}` odgovara aktivna stranica."
+  }
+}
