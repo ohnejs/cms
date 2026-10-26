@@ -13,6 +13,8 @@ import {
 
 import { routeEntries, useCMSConfig } from './config.ts';
 
+export { NOT_FOUND_SLUG } from './config.ts';
+
 /**
  * One pattern a path may match: a collection's route in one locale.
  */

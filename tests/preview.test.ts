@@ -14,11 +14,13 @@ export default defineConfig({
 });
 `,
   'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
+import { useUser } from 'ohnejs/auth';
 import { pageFields, publishedScope } from '@ohnejs/cms';
 export default defineCollection({
   fields: {
     title: field('text'),
     ...pageFields(),
+    editor: field('text', { nullable: true, default: async () => (await useUser())?.email ?? null }),
     note: field('text', { nullable: true, readable: false }),
     link: field('link', { collections: ['Pages'], nullable: true }),
     photo: field('image'),
@@ -39,12 +41,14 @@ export default defineBlock({
   fields: {
     heading: field('text'),
     secret: field('text', { nullable: true, readable: false }),
+    cta: field('object', { nullable: true, fields: { label: field('text') } }),
+    size: field('number', { default: 3 }),
     columns: field('repeater', { fields: { body: field('blocks', { allow: ['Quote'] }) } }),
   },
 });
 `,
   'blocks/Quote.ts': `import { defineBlock, field } from 'ohnejs';
-export default defineBlock({ fields: { text: field('text') } });
+export default defineBlock({ fields: { text: field('text'), by: field('text', { nullable: true }) } });
 `,
 };
 
@@ -102,6 +106,19 @@ describe('preview drafts', () => {
       headers: token === undefined ? {} : { 'ohne-preview': token },
     });
     return { headers: response.headers, body: await response.json() };
+  }
+
+  /**
+   * `value` without its `UUID`s and `_updatedAt`s at any depth, nor the top-level `keys`.
+   */
+  function shape(value: unknown, keys: string[] = []): unknown {
+    const plain = JSON.parse(
+      JSON.stringify(value, (key, entry) =>
+        key === 'UUID' || key === '_updatedAt' ? undefined : entry,
+      ),
+    );
+    for (const key of keys) delete plain[key];
+    return plain;
   }
 
   before(async () => {
@@ -163,7 +180,7 @@ describe('preview drafts', () => {
     const { body } = await resolve('/about', token);
     strictEqual('note' in body.record, false);
     deepStrictEqual(body.record.content, [
-      { block: 'Hero', UUID: 'b1', fields: { heading: 'Draft' } },
+      { block: 'Hero', UUID: 'b1', fields: { heading: 'Draft', cta: null, size: 3, columns: [] } },
     ]);
   });
 
@@ -207,21 +224,128 @@ describe('preview drafts', () => {
     strictEqual(hero.fields.columns[0].UUID, row.UUID);
   });
 
-  it('reads a never saved record as its system fields', async () => {
+  it('reads a never saved record as a create stores it', async () => {
     const cookie = await signIn('ada@example.com');
     const { token } = await mint(cookie);
-    await put(cookie, token, { record: 'new-page', values: { title: 'New', slug: 'new' } });
+    const content = [{ block: 'Hero', fields: { heading: 'Hi', columns: [{}] } }];
+    await put(cookie, token, {
+      record: 'new-page',
+      values: { title: 'New', slug: 'new', content },
+    });
+    const created = await queryUntyped('Pages').createOrThrow({
+      title: 'New',
+      slug: 'new-saved',
+      content,
+    });
+    const stored = await queryUntyped('Pages').where({ UUID: created.UUID }).findFirst();
+    const page = (await resolve('/new', token)).body.record;
+    deepStrictEqual(shape(page, ['slug', 'editor']), shape(stored, ['slug', 'editor']));
+
     await put(cookie, token, {
       collection: 'Posts',
       record: 'new-post',
       values: { title: 'New', slug: 'new-post' },
     });
-    const page = (await resolve('/new', token)).body.record;
-    strictEqual(typeof page._updatedAt, 'number');
-    strictEqual('_translations' in page, false);
-    const post = (await resolve('/blog/new-post', token)).body.record;
-    strictEqual(typeof post._updatedAt, 'number');
-    deepStrictEqual(post._translations, []);
+    const post = await queryUntyped('Posts').createOrThrow({
+      title: 'New',
+      slug: 'new-post-saved',
+    });
+    const storedPost = await queryUntyped('Posts')
+      .where({ UUID: post.UUID })
+      .locale('en')
+      .findFirst();
+    const previewed = (await resolve('/blog/new-post', token)).body.record;
+    deepStrictEqual(previewed._translations, ['en']);
+    deepStrictEqual(shape(previewed, ['slug']), shape(storedPost, ['slug']));
+  });
+
+  it("fills a never saved record's callback defaults as its editor", async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const response = await put(cookie, token, {
+      record: 'by-ada',
+      path: '/by-ada',
+      values: { title: 'Mine', slug: 'by-ada' },
+    });
+    strictEqual(((await response.json()) as any).record.editor, 'ada@example.com');
+    strictEqual((await resolve('/by-ada', token)).body.record.editor, 'ada@example.com');
+  });
+
+  it('previews a new block item and row of a saved page as a save stores them', async () => {
+    const saved = await queryUntyped('Pages').createOrThrow({
+      status: 'published',
+      title: 'Nested',
+      slug: 'nested',
+    });
+    const content = [
+      {
+        block: 'Hero',
+        fields: {
+          heading: 'New',
+          secret: 'x',
+          columns: [{ body: [{ block: 'Quote', fields: { text: 'Q' } }] }, {}],
+        },
+      },
+    ];
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, { record: saved.UUID, values: { slug: 'nested', content } });
+    const previewed = (await resolve('/nested', token)).body.record.content;
+    await queryUntyped('Pages').where({ UUID: saved.UUID }).updateOrThrow({ content });
+    const stored: any = await queryUntyped('Pages').where({ UUID: saved.UUID }).findFirst();
+    strictEqual('secret' in previewed[0].fields, false);
+    deepStrictEqual(shape(previewed), shape(stored.content));
+  });
+
+  it('previews an unpublished page at its saved path once its slug is edited', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const response = await put(cookie, token, {
+      record: hidden,
+      path: '/hidden',
+      values: { title: 'Hidden', slug: 'hidden-moved' },
+    });
+    for (const body of [(await response.json()) as any, (await resolve('/hidden', token)).body]) {
+      strictEqual(body.kind, 'page');
+      strictEqual(body.record.slug, 'hidden-moved');
+      strictEqual(body.path, '/hidden-moved');
+    }
+    deepStrictEqual((await resolve('/hidden')).body, { kind: 'notFound' });
+    deepStrictEqual((await resolve('/hidden-moved')).body, { kind: 'notFound' });
+  });
+
+  it('never shows an unpublished page under a token without its draft', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, { record: about, values: { title: 'About', slug: 'about' } });
+    deepStrictEqual((await resolve('/hidden', token)).body, { kind: 'notFound' });
+  });
+
+  it('keeps a slug another unpublished page holds its own, wherever the draft shows', async () => {
+    const moved = (await queryUntyped('Pages').createOrThrow({ title: 'Moved', slug: 'moved' }))
+      .UUID as string;
+    await queryUntyped('Pages').createOrThrow({ title: 'Held', slug: 'held' });
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    await put(cookie, token, { record: moved, values: { title: 'Moved', slug: 'held' } });
+    const { body } = await resolve('/moved', token);
+    strictEqual(body.UUID, moved);
+    strictEqual(body.path, '/held');
+    deepStrictEqual((await resolve('/held', token)).body, { kind: 'notFound' });
+  });
+
+  it('lays a draft over an unpublished translation at its saved path in its own locale alone', async () => {
+    const post = (await queryUntyped('Posts').createOrThrow({ title: 'Hush', slug: 'hush' }))
+      .UUID as string;
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const draft = { collection: 'Posts', record: post };
+    await put(cookie, token, { ...draft, locale: 'de', values: { title: 'Still', slug: 'still' } });
+    deepStrictEqual((await resolve('/blog/hush', token)).body, { kind: 'notFound' });
+    await put(cookie, token, { ...draft, values: { title: 'Hush', slug: 'hush-moved' } });
+    const { body } = await resolve('/blog/hush', token);
+    strictEqual(body.UUID, post);
+    strictEqual(body.path, '/blog/hush-moved');
   });
 
   it('answers a draft as the website reads it, not as its editor', async () => {
@@ -261,6 +385,13 @@ describe('preview drafts', () => {
       put(cookie, token, { record: about, values: { title: nested(depth) } });
     strictEqual((await draft(60)).status, 200);
     strictEqual((await draft(64)).status, 400);
+  });
+
+  it('refuses a draft in a locale outside `collections.locales`', async () => {
+    const cookie = await signIn('ada@example.com');
+    const { token } = await mint(cookie);
+    const response = await put(cookie, token, { record: about, locale: 'fr', values: {} });
+    strictEqual(response.status, 400);
   });
 
   it('refuses to mint a token without a session', async () => {

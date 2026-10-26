@@ -6,7 +6,7 @@ import { asVisitor } from '../../../src/relations.ts';
 import { resolvePath } from '../../../src/resolve.ts';
 
 /**
- * Whether a page a visitor sees answers at `?path=`, which leaves a redirect from that path inactive.
+ * Whether a redirect from `?path=` is inactive, since a page a visitor sees answers that path first.
  * It answers `{ shadowed }` to a caller who may read redirects, and refuses everyone else.
  * The page is read as a visitor reads it, with no drafts and no read middleware.
  */
@@ -15,5 +15,5 @@ export default defineHandler(async () => {
   if (isNull(path) || !path.startsWith('/')) throw badRequest(translate('cms.api.invalidPath'));
   if ((await readReach('Redirects')) === false) throw forbidden();
   const answer = await asVisitor(() => resolvePath(path));
-  return { shadowed: answer.kind === 'page' };
+  return { shadowed: answer.kind !== 'redirect' };
 });

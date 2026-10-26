@@ -86,6 +86,12 @@ export default defineCollection({
       seo: { noindex: true },
     });
     await queryUntyped('Pages').createOrThrow({ status: 'published', title: 'Lost', slug: '404' });
+    await queryUntyped('Posts').createOrThrow({
+      status: 'published',
+      title: 'Errors',
+      slug: '404',
+    });
+    await queryUntyped('Redirects').createOrThrow({ from: '/404', to: '/about' });
     await queryUntyped('Redirects').createOrThrow({
       from: '/old',
       to: '/about',
@@ -123,6 +129,15 @@ export default defineCollection({
     const lost = await resolve('/nope');
     strictEqual(lost.kind, 'notFound');
     strictEqual(lost.page.title, 'Lost');
+  });
+
+  it("answers the 404 page's own path as a miss in every locale, over a redirect", async () => {
+    for (const path of ['/404', '/de/404']) {
+      const lost = await resolve(path);
+      strictEqual(lost.kind, 'notFound', path);
+      strictEqual(lost.page?.title, 'Lost', path);
+    }
+    strictEqual((await resolve('/blog/404')).record?.title, 'Errors');
   });
 
   it('carries the 404 page on a path whose locale prefix is ruled out', async () => {
@@ -202,7 +217,8 @@ export default defineCollection({
     match(xml, /<loc>https:\/\/example\.com\/de\/artikel\/hallo<\/loc>/);
     match(xml, /hreflang="de" href="https:\/\/example\.com\/de\/artikel\/hallo"/);
     strictEqual(xml.includes('/hidden'), false);
-    strictEqual(xml.includes('/404'), false);
+    match(xml, /<loc>https:\/\/example\.com\/blog\/404<\/loc>/);
+    strictEqual(xml.includes('example.com/404<'), false);
   });
 
   it('opens robots.txt to everyone and names the sitemap, or closes it under noindex', async () => {

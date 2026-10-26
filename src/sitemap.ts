@@ -1,7 +1,7 @@
 import { queryUntyped, useConfig } from 'ohnejs';
 import { escapeXML, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
-import { routePath, routesIn } from './routes.ts';
+import { isHome, NOT_FOUND_SLUG, routePath, routesIn } from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
 import { absolute } from './seo.ts';
 
@@ -16,7 +16,8 @@ interface Entry {
 /**
  * The sitemap of every page the public may see, one `<url>` per page and locale.
  * A page in several locales lists the others as `hreflang` alternates.
- * Pages marked `noindex`, and the `404` page, stay out; a site marked `noindex` lists nothing.
+ * Pages marked `noindex`, and the `404` page under `/[...slug]`, stay out.
+ * A site marked `noindex` lists nothing.
  */
 export async function sitemap(): Promise<string> {
   const site = await queryUntyped('Site').findFirst();
@@ -52,7 +53,7 @@ async function collect(): Promise<Map<string, Entry>> {
   for (const locale of useConfig().collections.locales) {
     for (const route of routesIn(locale)) {
       for (const record of await readAll(route.collection, locale)) {
-        if (record.slug === '404') continue;
+        if (isHome(route) && record.slug === NOT_FOUND_SLUG) continue;
         if (isPlainObject(record.seo) && record.seo.noindex === true) continue;
         const path = routePath(route, isString(record.slug) ? record.slug : undefined);
         if (isUndefined(path)) continue;
@@ -75,7 +76,8 @@ async function readAll(collection: string, locale: string) {
 }
 
 /**
- * The `robots.txt` of the website: everything open with the sitemap named, or everything closed under `noindex`.
+ * The `robots.txt` of the website.
+ * It opens everything and names the sitemap, or closes everything under `noindex`.
  */
 export async function robots(): Promise<string> {
   const site = await queryUntyped('Site').findFirst();

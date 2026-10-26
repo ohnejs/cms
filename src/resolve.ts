@@ -14,7 +14,14 @@ import type { Draft } from './preview/drafts.ts';
 
 import { useCMSConfig } from './config.ts';
 import { loadRelations } from './relations.ts';
-import { type CMSRoute, isHome, routePath, routesIn, splitLocale } from './routes.ts';
+import {
+  type CMSRoute,
+  isHome,
+  NOT_FOUND_SLUG,
+  routePath,
+  routesIn,
+  splitLocale,
+} from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
 import { type Alternate, alternatesOf, type SEO, seoOf } from './seo.ts';
 
@@ -43,9 +50,11 @@ export type Resolved =
  * That slug's own path redirects to `/`.
  * A redirect whose `from` is the path answers only when no page does, so a live page shadows it.
  * A path nothing answers carries the page with the slug `404`, when there is one.
+ * The `404` page's own path answers as a miss, carrying it.
  * A path whose locale prefix is ruled out carries the default locale's.
  * With `drafts`, an editor's unsaved state wins over the saved record.
  * A draft's slug finds its page, unless another saved record holds that slug.
+ * A drafted record shows at its saved slug too, whatever its publish state.
  * The record's relations load one level deep, at the top and inside its blocks.
  * The loaded records keep their own record relations as `UUID`s.
  * Their uploads load too, at every depth, since an upload is a public file and never a scoped record.
@@ -69,6 +78,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
     if (!home && isHome(route) && slug === homeSlug)
       return { kind: 'redirect', to: path, code: 301 };
     await loadRelations([record], route.collection, route.locale);
+    if (isHome(route) && slug === NOT_FOUND_SLUG) return { kind: 'notFound', page: record };
     return {
       kind: 'page',
       collection: route.collection,
@@ -119,7 +129,7 @@ function forward(to: string, url: URL): string {
 async function missIn(locale: string, drafts: readonly Draft[]): Promise<Resolved> {
   const route = routesIn(locale).find(isHome);
   if (isUndefined(route)) return { kind: 'notFound' };
-  const page = await readPage(route, '404', drafts);
+  const page = await readPage(route, NOT_FOUND_SLUG, drafts);
   if (isUndefined(page)) return { kind: 'notFound' };
   await loadRelations([page], route.collection, route.locale);
   return { kind: 'notFound', page };
@@ -143,7 +153,8 @@ async function readPage(
     const saved = await readTrusted(route, drafted.record, translatable);
     return { ...saved, ...drafted.values, UUID: drafted.record };
   }
-  const saved = await readScoped(route, slug);
+  const saved =
+    (await readScoped(route, slug)) ?? (await readDrafted(route, slug, own, translatable));
   if (isUndefined(saved)) return undefined;
   const draft = own.find((entry) => entry.record === saved.UUID);
   return isUndefined(draft) ? saved : { ...saved, ...draft.values, UUID: saved.UUID };
@@ -160,6 +171,25 @@ async function readScoped(
   const builder = await scopedRead(route.collection, route.locale);
   if (isUndefined(builder)) return undefined;
   if (!isUndefined(slug)) builder.where({ slug });
+  return builder.findFirst();
+}
+
+/**
+ * The saved record by `slug` among those the drafts lay over, whatever its publish state.
+ * Each draft passed its editor's write check, so it reveals no record they could not preview.
+ */
+async function readDrafted(
+  route: CMSRoute,
+  slug: string | undefined,
+  drafts: readonly Draft[],
+  translatable: boolean,
+): Promise<QueryRecord | undefined> {
+  if (isUndefined(slug) || isEmpty(drafts)) return undefined;
+  const builder = queryUntyped(route.collection).where({
+    slug,
+    UUID: { in: drafts.map((draft) => draft.record) },
+  });
+  if (translatable) builder.locale(route.locale);
   return builder.findFirst();
 }
 
@@ -184,7 +214,7 @@ async function heldElsewhere(
 
 /**
  * The saved state of a drafted record, whatever its publish state, since its editor previews it.
- * A record that was never saved reads as its system fields alone.
+ * A record that was never saved reads as its system fields alone, since its draft holds the rest.
  */
 async function readTrusted(
   route: CMSRoute,
@@ -197,7 +227,7 @@ async function readTrusted(
     (await builder.findFirst()) ?? {
       UUID: record,
       _updatedAt: Date.now(),
-      ...(translatable ? { _translations: [] } : {}),
+      ...(translatable ? { _translations: [route.locale] } : {}),
     }
   );
 }

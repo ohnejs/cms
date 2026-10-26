@@ -3,15 +3,17 @@ import type { FieldQueryMeta } from 'ohnejs';
 import {
   badRequest,
   blockQueryMetadata,
+  fillDefaults,
   forbidden,
   HTTPError,
   queryMetadata,
   queryUntyped,
   translate,
   useBlocks,
+  useConfig,
 } from 'ohnejs';
 import { queryScoped } from 'ohnejs/auth';
-import { isArray, isPlainObject, isString, isUndefined, uuidv7 } from 'ohnejs/utils';
+import { hasKey, isArray, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
 import type { PreviewToken } from './tokens.ts';
 
@@ -61,12 +63,17 @@ export async function draftsOf(token: PreviewToken): Promise<Draft[]> {
 
 /**
  * The draft body of a request, its values cleaned of every field the public could not read.
+ * They then fill as a save would store them: a whole new record, or every new item of a saved one.
  * A malformed body is a `400`; a record the caller may not change is a `403`.
  */
 export async function checkDraft(input: unknown): Promise<Draft> {
   const draft = parseDraft(input);
-  await assertWritable(draft.collection, draft.record);
-  draft.values = clean(draft.values, queryMetadata(draft.collection).fields);
+  const saved = await assertWritable(draft.collection, draft.record);
+  draft.values = await fillDefaults(
+    draft.collection,
+    clean(draft.values, queryMetadata(draft.collection).fields),
+    { operation: saved ? 'update' : 'create', locale: draft.locale },
+  );
   return draft;
 }
 
@@ -78,9 +85,10 @@ function parseDraft(input: unknown): Draft {
   const { collection, record, locale, values } = body;
   if (
     !isString(collection) ||
-    !Object.hasOwn(useCMSConfig().routes, collection) ||
+    !hasKey(useCMSConfig().routes, collection) ||
     !isString(record) ||
     !isString(locale) ||
+    !useConfig().collections.locales.includes(locale) ||
     !isPlainObject(values)
   ) {
     throw badRequest(translate('cms.preview.invalidDraft'));
@@ -89,17 +97,17 @@ function parseDraft(input: unknown): Draft {
 }
 
 /**
- * Refuses a draft of a record the caller may not change.
+ * Refuses a draft of a record the caller may not change, and answers whether the record was saved.
  * That is an existing record outside their update scope, or a new one in a collection they may not create in.
  */
-export async function assertWritable(collection: string, record: string): Promise<void> {
+export async function assertWritable(collection: string, record: string): Promise<boolean> {
   try {
     if (await queryUntyped(collection).where({ UUID: record }).exists()) {
       const scoped = await queryScoped(collection, 'update');
-      if (await scoped.where({ UUID: record }).exists()) return;
+      if (await scoped.where({ UUID: record }).exists()) return true;
     } else {
       await queryScoped(collection, 'create');
-      return;
+      return false;
     }
   } catch (error) {
     if (!(error instanceof HTTPError)) throw error;
@@ -109,8 +117,6 @@ export async function assertWritable(collection: string, record: string): Promis
 
 /**
  * The values with every unknown and unreadable field removed, descending into blocks and child tables.
- * An item without a `UUID` gets one, so a preview item is keyed like a saved one.
- * That `UUID` changes with each edit until the record saves.
  */
 function clean(
   values: Readonly<Record<string, unknown>>,
@@ -126,11 +132,7 @@ function clean(
       !isUndefined(meta.subfields)
     ) {
       const subfields = meta.subfields;
-      const row = (item: Readonly<Record<string, unknown>>): Record<string, unknown> => {
-        const cleaned = clean(item, subfields);
-        if (!isString(cleaned.UUID)) cleaned.UUID = uuidv7();
-        return cleaned;
-      };
+      const row = (item: Readonly<Record<string, unknown>>) => clean(item, subfields);
       kept[key] = isArray(value)
         ? value.map((item) => (isPlainObject(item) ? row(item) : item))
         : isPlainObject(value)
@@ -143,8 +145,6 @@ function clean(
 
 /**
  * The block items of a draft, each item's fields cleaned by its own block's metadata.
- * An item without a `UUID` gets one, so a preview item is keyed like a saved one.
- * That `UUID` changes with each edit until the record saves.
  */
 function cleanBlocks(value: unknown): unknown[] {
   if (!isArray(value)) return [];
@@ -156,7 +156,7 @@ function cleanBlocks(value: unknown): unknown[] {
     return [
       {
         block: item.block,
-        UUID: isString(item.UUID) ? item.UUID : uuidv7(),
+        ...(isString(item.UUID) ? { UUID: item.UUID } : {}),
         fields: clean(fields, blockQueryMetadata(item.block).fields),
       },
     ];

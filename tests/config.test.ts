@@ -119,6 +119,27 @@ describe('cms config', () => {
     );
   });
 
+  it('refuses a home slug no page can hold', async () => {
+    await rejects(
+      async () => (await startApp({ 'ohne.config.ts': config("{ homeSlug: 'Home' }") })).stop(),
+      (error: Error & { body?: string[] }) =>
+        /Invalid `cms.homeSlug` value `Home`/.test(error.message) &&
+        String(error.body).includes('`home`'),
+    );
+    for (const slug of ['404', '']) {
+      await refuses(
+        { 'ohne.config.ts': config(`{ homeSlug: '${slug}' }`) },
+        /Invalid `cms.homeSlug` value/,
+      );
+    }
+  });
+
+  it('takes a home slug that is already a slug', async () => {
+    for (const slug of ['index', 'start/page']) {
+      await (await startApp({ 'ohne.config.ts': config(`{ homeSlug: '${slug}' }`) })).stop();
+    }
+  });
+
   it('picks the first of a share list set without a default', async () => {
     const app = await startApp({
       'ohne.config.ts': config("{ share: { durations: ['2h', '3d'] } }"),

@@ -3,6 +3,7 @@ import type { LayerStrategies } from 'ohnejs/utils';
 
 import { ohneError, useCollections, useConfig, useEnv } from 'ohnejs';
 import {
+  canonicalSlug,
   compileRoute,
   isNull,
   isPlainObject,
@@ -54,7 +55,8 @@ declare module 'ohnejs' {
       prefixDefaultLocale?: boolean;
 
       /**
-       * What the live editor frames, relative to `site`: `{path}` is the page's path, `{token}` the preview token.
+       * What the live editor frames, relative to `site`.
+       * `{path}` is the page's path, and `{token}` the preview token.
        * A site whose framework needs a preview route of its own, like Next's draft mode, points it there.
        *
        * @default
@@ -76,7 +78,8 @@ declare module 'ohnejs' {
       homeSlug?: string;
 
       /**
-       * The URLs told about every change to a page, the site settings, or a redirect, so a website can refresh.
+       * The URLs told about every change to a page, the site settings, or a redirect.
+       * A website refreshes its pages when told.
        * Each request is signed with the hook's `secret`; check it with `verifyWebhook` from `@ohnejs/client`.
        *
        * @default
@@ -196,6 +199,11 @@ export const CMS_DEFAULTS = {
 } satisfies Omit<ResolvedCMSConfig, 'site' | 'types'>;
 
 /**
+ * The slug under `/[...slug]` of the page a path nothing answers carries.
+ */
+export const NOT_FOUND_SLUG = '404';
+
+/**
  * How the cms keys merge, keyed by their path under `Config.cms`.
  * `routes` assigns, so each layer and the app add or replace one collection's pattern.
  */
@@ -227,8 +235,9 @@ export function useCMSConfig(): ResolvedCMSConfig {
  * A boot file runs it, so a bad route stops the server before any page is asked for.
  */
 export function validateCMSConfig(): void {
-  const { site, routes, previewURL, webhooks, share } = useCMSConfig();
+  const { site, routes, previewURL, webhooks, share, homeSlug } = useCMSConfig();
   validateShare(share);
+  validateHomeSlug(homeSlug);
   cmsTypesPath();
   for (const hook of webhooks) {
     const url = URL.parse(hook.url);
@@ -348,6 +357,29 @@ function validateShare({ durations, default: initial }: ResolvedCMSConfig['share
 }
 
 /**
+ * Rejects a home slug no page can hold: one the slug field would store differently, or the `404` slug.
+ */
+function validateHomeSlug(homeSlug: string): void {
+  const canonical = canonicalSlug(homeSlug, { nested: true });
+  if (canonical === '' || homeSlug === NOT_FOUND_SLUG) {
+    throw ohneError({
+      title: `Invalid \`cms.homeSlug\` value \`${homeSlug}\``,
+      body: ['A home slug is a non-empty slug other than `404`.'],
+    });
+  }
+  if (canonical !== homeSlug) {
+    throw ohneError({
+      title: `Invalid \`cms.homeSlug\` value \`${homeSlug}\``,
+      body: [
+        `Slugs are stored as \`${canonical}\`, so no page can hold \`${homeSlug}\`.`,
+        '',
+        `Set \`cms.homeSlug\` to \`${canonical}\`.`,
+      ],
+    });
+  }
+}
+
+/**
  * The milliseconds `duration` spans, or `NaN` when it does not parse.
  */
 function lifetime(duration: string): number {
@@ -423,7 +455,8 @@ function validatePattern(
 }
 
 /**
- * The pattern with every param reduced to a placeholder, so two patterns that match the same paths compare equal.
+ * The pattern with every param reduced to a placeholder.
+ * Two patterns that match the same paths share one shape.
  */
 function patternShape(pattern: string): string {
   return pattern

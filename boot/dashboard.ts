@@ -1,7 +1,7 @@
 import { hook, useConfig } from 'ohnejs';
-import { isUndefined, mapValues } from 'ohnejs/utils';
+import { compileRoute, hasKey, isUndefined, mapValues } from 'ohnejs/utils';
 
-import { routeEntries, useCMSConfig } from '../src/config.ts';
+import { NOT_FOUND_SLUG, routeEntries, useCMSConfig } from '../src/config.ts';
 
 declare module 'ohnejs/base' {
   interface DashboardMeta {
@@ -10,7 +10,7 @@ declare module 'ohnejs/base' {
      */
     cms?: {
       /**
-       * Each collection with pages, mapped to its route pattern per locale.
+       * Each collection with pages, mapped to its normalized route pattern per locale.
        */
       routes: Record<string, Record<string, string>>;
 
@@ -30,6 +30,11 @@ declare module 'ohnejs/base' {
       homeSlug: string;
 
       /**
+       * The slug under `/[...slug]` whose page a path nothing answers shows.
+       */
+      notFoundSlug: string;
+
+      /**
        * What the live editor frames, relative to `site`, with `{path}` and `{token}` filled in.
        */
       previewURL: string;
@@ -46,11 +51,24 @@ hook('dashboard:meta', (meta) => {
   const { locales } = useConfig().collections;
   const { routes, site, prefixDefaultLocale, homeSlug, previewURL, share } = useCMSConfig();
   meta.cms = {
-    routes: mapValues(routes, (_, value) => Object.fromEntries(routeEntries(value, locales))),
+    routes: mapValues(routes, (_, value) =>
+      mapValues(
+        Object.fromEntries(routeEntries(value, locales)),
+        (_, pattern) => compileRoute(pattern).pattern,
+      ),
+    ),
     prefixDefaultLocale,
     homeSlug,
+    notFoundSlug: NOT_FOUND_SLUG,
     previewURL,
     share,
   };
   if (!isUndefined(site)) meta.cms.site = site;
+  for (const collection of meta.collections) {
+    if (!hasKey(routes, collection.name)) continue;
+    const slug = collection.fields.find((field) => field.name === 'slug' && field.type === 'slug');
+    if (isUndefined(slug)) continue;
+    slug.type = 'pageSlug';
+    slug.options = { ...slug.options, collection: collection.name };
+  }
 });

@@ -13,16 +13,22 @@ describe('dashboard meta', () => {
 export default defineConfig({
   layers: ['@ohnejs/cms'],
   collections: { locales: ['en', 'de'], defaultLocale: 'en' },
-  cms: { routes: { Pages: '/[...slug]', Posts: { de: '/artikel/[slug]' } } },
+  cms: { routes: { Pages: '/[...slug]/', Posts: { de: '/artikel/[slug]' } } },
 });
 `,
       'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
 import { pageFields } from '@ohnejs/cms';
-export default defineCollection({ fields: { title: field('text'), ...pageFields() } });
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields() },
+  api: { read: 'public' },
+});
 `,
       'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
 import { pageFields } from '@ohnejs/cms';
 export default defineCollection({ fields: { title: field('text'), ...pageFields() } });
+`,
+      'collections/Tags.ts': `import { defineCollection, field } from 'ohnejs';
+export default defineCollection({ fields: { slug: field('slug') }, api: { read: 'public' } });
 `,
     });
     await queryUntyped('Users').createOrThrow({
@@ -34,7 +40,7 @@ export default defineCollection({ fields: { title: field('text'), ...pageFields(
 
   after(() => app.stop());
 
-  it('lists each routed collection with its pattern per locale', async () => {
+  it('lists each routed collection with its normalized pattern per locale and a page slug', async () => {
     const base = `http://127.0.0.1:${app.port}`;
     const login = await fetch(`${base}/auth/login`, {
       method: 'POST',
@@ -47,13 +53,22 @@ export default defineCollection({ fields: { title: field('text'), ...pageFields(
       .join('; ');
     const meta = (await (await fetch(`${base}/dashboard`, { headers: { cookie } })).json()) as {
       cms?: unknown;
+      collections: { name: string; fields: { name: string; type: string; options?: object }[] }[];
     };
     deepStrictEqual(meta.cms, {
       routes: { Pages: { en: '/[...slug]', de: '/[...slug]' }, Posts: { de: '/artikel/[slug]' } },
       prefixDefaultLocale: false,
       homeSlug: 'index',
+      notFoundSlug: '404',
       previewURL: '{path}?ohne-preview={token}',
       share: { durations: ['1h', '1d', '7d', '30d'], default: '1d' },
     });
+    const slug = (collection: string) =>
+      meta.collections
+        .find((entry) => entry.name === collection)
+        ?.fields.find((field) => field.name === 'slug');
+    deepStrictEqual(slug('Pages')?.type, 'pageSlug');
+    deepStrictEqual(slug('Pages')?.options, { nested: true, collection: 'Pages' });
+    deepStrictEqual(slug('Tags')?.type, 'slug');
   });
 });

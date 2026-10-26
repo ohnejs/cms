@@ -1,7 +1,7 @@
 import type { BlockAction, Child } from 'ohnejs/dashboard';
 
-import { api, attachTooltip, button, css, h, useT, when } from 'ohnejs/dashboard';
-import { effect, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
+import { api, attachTooltip, button, css, h, renderProse, useT, when } from 'ohnejs/dashboard';
+import { effect, isString, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
 
 import { frameURL } from './cms-meta.ts';
 
@@ -20,12 +20,19 @@ export interface PreviewPaneOptions {
   path: () => string | undefined;
 
   /**
-   * The unsaved state to show, as a draft body; `undefined` while it cannot be read, as with a malformed number.
+   * Whether the page exists only in its draft, as a new record's or a new translation's does.
+   * Such a page shows `missing` until a draft of it is stored, then frames on while the form errs.
+   */
+  fresh: () => boolean;
+
+  /**
+   * The unsaved state to show, as a draft body.
+   * It is `undefined` until the form loads.
    */
   draft: () => Record<string, unknown> | undefined;
 
   /**
-   * Why there is no page to frame, shown in its place.
+   * Why there is no page to frame, shown in its place as markdown-lite.
    */
   missing: () => string;
 
@@ -135,7 +142,8 @@ css`
     width: 100%;
     height: 100%;
     border: none;
-    background-color: white;
+    /* The site reads its color scheme from this frame, so a fixed white hides a dark site's text. */
+    background-color: Canvas;
     border-radius: var(--ohne-radius);
   }
 
@@ -203,6 +211,11 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
   const size = ref({ width: 0, height: 0 });
   const token = ref<string | undefined>(undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let stored: string | undefined;
+  // A frame loaded before its path had a draft shows the site without it, which streamed data cannot fix.
+  let stale = false;
+  let missed: unknown;
+  const kept = ref(false);
 
   void api('POST /cms/preview/tokens').then(async (response) => {
     if (response.ok) token.value = ((await response.json()) as { token: string }).token;
@@ -210,8 +223,13 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
 
   const url = (): string | undefined => {
     const path = options.path();
-    return isUndefined(path) || isUndefined(token.value) ? undefined : frameURL(path, token.value);
+    if (isUndefined(path) || isUndefined(token.value)) return undefined;
+    return options.fresh() && !kept.value ? undefined : frameURL(path, token.value);
   };
+
+  effect(() => {
+    if (!options.fresh()) kept.value = false;
+  });
 
   const origin = (): string | undefined => {
     const target = url();
@@ -224,19 +242,33 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
     iframe.contentWindow?.postMessage({ ohne: PROTOCOL, type, ...payload }, target);
   };
 
+  let loadTimer: ReturnType<typeof setTimeout> | undefined;
+  let framed: string | undefined;
   const load = (): void => {
     const target = untracked(url);
     if (isUndefined(target)) return;
     connected.value = false;
     silent.value = false;
+    stale = stored !== untracked(options.path);
+    missed = undefined;
+    clearTimeout(loadTimer);
+    framed = target;
     iframe.src = target;
   };
 
-  let loadTimer: ReturnType<typeof setTimeout> | undefined;
   // A page the draft names, like a new one by its slug, exists only once that draft is stored.
   effect(() => {
-    void url();
+    const target = url();
     clearTimeout(loadTimer);
+    // A save hands over a new record, which reruns this with the same address.
+    if (target === framed) return;
+    stale = false;
+    if (isUndefined(target)) {
+      // The frame leaves the DOM, and back in it would load its old address before the draft lands.
+      framed = undefined;
+      iframe.removeAttribute('src');
+      return;
+    }
     loadTimer = setTimeout(() => void flush().then(load), LOAD_DELAY);
   });
 
@@ -244,10 +276,14 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
   effect(() => {
     void options.saves();
     if (first) first = false;
-    else if (!untracked(() => connected.value)) untracked(load);
+    else if (!isUndefined(framed) && !untracked(() => connected.value)) {
+      untracked(load);
+      // The page framed is the saved record, which the draft stored after it only repeats.
+      stale = false;
+    }
   });
 
-  let pending: Record<string, unknown> | undefined;
+  let pending: (Record<string, unknown> & { path: string | undefined }) | undefined;
   let pushing: Promise<void> = Promise.resolve();
   let pushTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -260,20 +296,42 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       if (isUndefined(draft) || isUndefined(token.value)) return;
       const response = await api(`PUT /cms/preview/tokens/${token.value}`, {
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...draft, path: untracked(options.path) }),
+        body: JSON.stringify(draft),
       }).catch(() => undefined);
       const page: unknown = response?.ok ? await response.json().catch(() => undefined) : undefined;
-      if (!isUndefined(page) && isUndefined(pending)) post('data', { page });
+      if (isUndefined(page)) return;
+      stored = draft.path;
+      // A draft that lands after a switch to another page must not open that page's frame.
+      const framing = !isUndefined(draft.path) && draft.path === untracked(options.path);
+      if (framing && untracked(options.fresh)) kept.value = true;
+      if (!isUndefined(pending)) return;
+      if (stale) load();
+      else if (untracked(() => connected.value)) post('data', { page });
+      else missed = page;
     });
     return pushing;
+  };
+
+  const queue = (draft: Record<string, unknown>, path: string | undefined): void => {
+    pending = { ...draft, path };
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => void flush(), PUSH_DELAY);
   };
 
   effect(() => {
     const draft = options.draft();
     if (isUndefined(token.value) || isUndefined(draft)) return;
-    pending = draft;
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => void flush(), PUSH_DELAY);
+    // The path is the draft's own, as the slug it names may change before the push runs.
+    queue(draft, untracked(options.path));
+  });
+
+  // A new page's path can turn up after its draft, as when an address another page held frees.
+  effect(() => {
+    const path = options.path();
+    if (isUndefined(path) || path === stored || !untracked(options.fresh)) return;
+    const draft = untracked(options.draft);
+    if (isUndefined(untracked(() => token.value)) || isUndefined(draft)) return;
+    if (pending?.path !== path) queue(draft, path);
   });
 
   iframe.addEventListener('load', () => {
@@ -299,18 +357,16 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       post('setup', { v: PROTOCOL, editable: untracked(options.editable), texts: texts() });
       post('state', { blocks: untracked(options.blocks) });
       post('focus', { block: untracked(options.focused) ?? null });
-    } else if (data.type === 'select' && typeof data.block === 'string') {
+      if (!isUndefined(missed)) post('data', { page: missed });
+      missed = undefined;
+    } else if (data.type === 'select' && isString(data.block)) {
       options.onSelect(data.block);
     } else if (
       data.type === 'key' &&
       (data.action === 'undo' || data.action === 'redo' || data.action === 'save')
     ) {
       options.onKey(data.action);
-    } else if (
-      data.type === 'action' &&
-      ACTIONS.has(String(data.op)) &&
-      typeof data.block === 'string'
-    ) {
+    } else if (data.type === 'action' && ACTIONS.has(String(data.op)) && isString(data.block)) {
       options.onAction(data.op as BlockAction, data.block);
     }
   };
@@ -359,6 +415,9 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
 
   iframe.addEventListener('mouseleave', () => post('highlight', { block: null }));
 
+  const reason = h('div', { class: 'ohne-prose ohne-text' });
+  effect(() => renderProse(reason, options.missing(), { links: false }));
+
   const reload = button(() => t('cms.liveView.reload'), {
     icon: 'refresh',
     iconOnly: true,
@@ -380,7 +439,7 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
       when(
         () => !isUndefined(url()),
         () => iframe,
-        () => h('div', { class: 'o-cms-pv-missing' }, () => options.missing()),
+        () => h('div', { class: 'o-cms-pv-missing' }, reason),
       ),
       when(
         () => silent.value,

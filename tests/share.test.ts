@@ -181,6 +181,19 @@ describe('preview shares', () => {
     strictEqual(record.title === 'Hijacked', false);
   });
 
+  it('shows a snapshot of an unpublished page at its saved path once its slug is edited', async () => {
+    const quiet = (await queryUntyped('Pages').createOrThrow({ title: 'Quiet', slug: 'quiet' }))
+      .UUID as string;
+    const { body } = await share(await signIn('ada@example.com'), {
+      record: quiet,
+      path: '/quiet',
+      values: { title: 'Loud', slug: 'loud' },
+    });
+    const page = (await resolve('/quiet', body.token)).body;
+    strictEqual(page.record.title, 'Loud');
+    strictEqual(page.path, '/loud');
+  });
+
   it('drops every field the public could not read, inside blocks too', async () => {
     const { body } = await share(await signIn('ada@example.com'), {
       values: {

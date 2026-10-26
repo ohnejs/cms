@@ -16,7 +16,13 @@ export default defineConfig({
   layers: ['@ohnejs/cms'],
   auth: { loginRateLimit: false },
   collections: { locales: ['en', 'de'], defaultLocale: 'en' },
-  cms: { routes: { Pages: '/[...slug]', Posts: { en: '/blog/[slug]', de: '/artikel/[slug]' } } },
+  cms: {
+    routes: {
+      Pages: '/[...slug]',
+      Posts: { en: '/blog/[slug]', de: '/artikel/[slug]' },
+      Members: '/members/[slug]',
+    },
+  },
 });
 `,
       'collections/Pages.ts': `import { defineCollection, field } from 'ohnejs';
@@ -24,6 +30,13 @@ import { pageFields, publishedScope } from '@ohnejs/cms';
 export default defineCollection({
   fields: { title: field('text', { translatable: true }), ...pageFields(), photo: field('image') },
   api: { read: { public: true, access: publishedScope } },
+});
+`,
+      'collections/Members.ts': `import { defineCollection, field } from 'ohnejs';
+import { pageFields, publishedScope } from '@ohnejs/cms';
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields() },
+  api: { read: { public: true, middleware: ['require-auth'], access: publishedScope } },
 });
 `,
       'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
@@ -159,30 +172,41 @@ export default defineCollection({
     deepStrictEqual(await resolve('/promo'), { kind: 'redirect', to: '/sale', code: 301 });
   });
 
+  const signIn = async (email: string) => {
+    await queryUntyped('Users').createOrThrow({ email, password: PASSWORD, roles: ['admin'] });
+    const login = await fetch(`http://127.0.0.1:${app.port}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: PASSWORD }),
+    });
+    return login.headers
+      .getSetCookie()
+      .map((line) => line.split(';')[0])
+      .join('; ');
+  };
+
+  it('leaves no redirect into or out of the 404 page', async () => {
+    await rename(await page('404'), { slug: 'oops' });
+    await rename(await page('broken'), { slug: '404' });
+    deepStrictEqual(await redirects(), []);
+    await rename(await page('index'), { slug: 'start' });
+    deepStrictEqual(await redirects(), [
+      ['/', '/start'],
+      ['/de', '/de/start'],
+    ]);
+  });
+
   it('tells an editor whether a page a visitor sees holds a path, and refuses anyone else', async () => {
-    const base = `http://127.0.0.1:${app.port}`;
     const shadowed = async (path: string, cookie = '') => {
-      const response = await fetch(`${base}/cms/redirects/shadowed?path=${path}`, {
-        headers: { cookie },
-      });
+      const response = await fetch(
+        `http://127.0.0.1:${app.port}/cms/redirects/shadowed?path=${path}`,
+        { headers: { cookie } },
+      );
       return response.ok
         ? ((await response.json()) as { shadowed: boolean }).shadowed
         : response.status;
     };
-    await queryUntyped('Users').createOrThrow({
-      email: 'editor@example.com',
-      password: PASSWORD,
-      roles: ['admin'],
-    });
-    const login = await fetch(`${base}/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'editor@example.com', password: PASSWORD }),
-    });
-    const cookie = login.headers
-      .getSetCookie()
-      .map((line) => line.split(';')[0])
-      .join('; ');
+    const cookie = await signIn('editor@example.com');
     const photo = await queryUntyped('Uploads').createOrThrow({
       kind: 'file',
       directory: '',
@@ -191,10 +215,51 @@ export default defineCollection({
       size: 1,
       hash: 'deadbeef',
     });
+    for (const from of ['/hidden', '/shown', '/404']) {
+      await queryUntyped('Redirects').createOrThrow({ from, to: '/elsewhere' });
+    }
     await page('hidden', 'draft');
     await rename(await page('shown'), { photo: photo.UUID });
     strictEqual(await shadowed('/shown'), 403);
     strictEqual(await shadowed('/hidden', cookie), false);
     strictEqual(await shadowed('/shown', cookie), true);
+    strictEqual(await shadowed('/404', cookie), false);
+    await page('404');
+    strictEqual(await shadowed('/404', cookie), true);
+  });
+
+  it('tells whether a visitor sees a page at a path, whatever the caller may read', async () => {
+    const cookie = await signIn('author@example.com');
+    const live = async (path: string) => {
+      const response = await fetch(
+        `http://127.0.0.1:${app.port}/cms/routes/live?path=${encodeURIComponent(path)}`,
+        { headers: { cookie } },
+      );
+      return response.ok ? ((await response.json()) as { live: boolean }).live : response.status;
+    };
+    const home = await page('index', 'draft');
+    strictEqual(await live('/'), false);
+    await rename(home, { status: 'published' });
+    strictEqual(await live('/'), true);
+    await rename(home, { slug: 'start' });
+    strictEqual(await live('/'), false);
+    strictEqual(await live('about'), 400);
+  });
+
+  it('tells no one who may not read a page that it is live', async () => {
+    await queryUntyped('Members').createOrThrow({
+      title: 'Secret',
+      slug: 'secret',
+      status: 'published',
+    });
+    const live = async (cookie?: string) =>
+      (
+        (await (
+          await fetch(`http://127.0.0.1:${app.port}/cms/routes/live?path=%2Fmembers%2Fsecret`, {
+            headers: cookie === undefined ? {} : { cookie },
+          })
+        ).json()) as { live: boolean }
+      ).live;
+    deepStrictEqual([await live(), await live(await signIn('member@example.com'))], [false, true]);
   });
 });

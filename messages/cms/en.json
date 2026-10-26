@@ -3,9 +3,29 @@
     "invalidPath": "`path` must be a site path starting with `/`",
     "unsupportedParam": "Param `{param}` is not supported here"
   },
+  "address": {
+    "home": "Home page",
+    "leavesHome": "Once you save, this is no longer the home page.",
+    "leavesNotFound": "Once you save, missing addresses show a plain error.",
+    "notFound": "Not-found page",
+    "notFoundHint": "Shown for addresses that do not exist",
+    "openHome": "Open the current home page",
+    "openNotFound": "Open the current not-found page",
+    "own": "Give it its own address",
+    "reservedHome": "This address belongs to the home page. To make this the home page, choose it under Special page.",
+    "reservedNotFound": "This address belongs to the not-found page. To make this the not-found page, choose it under Special page.",
+    "special": "Special page",
+    "taken": "This address belongs to [{title}]({href}). Give this page a different address.",
+    "takenHome": "[{title}]({href}) is already the home page. Give this page a different address.",
+    "takenNotFound": "[{title}]({href}) is already the not-found page. Give this page a different address."
+  },
+  "delete": {
+    "home": "This is the home page. Once you delete it, your website has no home page until you choose another one under Special page.",
+    "notFound": "This is the not-found page. Once you delete it, missing addresses show a plain error until you choose another one under Special page."
+  },
   "fields": {
     "slug": {
-      "label": "Slug"
+      "label": "Address"
     },
     "status": {
       "label": "Status",
@@ -37,16 +57,26 @@
       }
     }
   },
+  "home": {
+    "heldNotLive": "`{title}` is the home page, but visitors cannot see it right now.",
+    "missing": "Your website has no live home page yet. To make this the home page, choose it under Special page.",
+    "missingIn": "Your website has no live home page in `{locale}` yet. To make this the home page, choose it under Special page.",
+    "missingOther": "Your website has no live home page yet. Make another page the home page under Special page.",
+    "missingOtherIn": "Your website has no live home page in `{locale}` yet. Make another page the home page under Special page.",
+    "unpublished": "This is the home page, but visitors cannot see it right now."
+  },
   "validation": {
-    "slugNested": "A slash in this slug needs a route ending in `[...slug]`",
+    "slugNested": "This address cannot contain a slash",
     "path": "Start the path with a slash",
     "target": "Use a path starting with a slash, or a full URL"
   },
   "liveView": {
-    "addSlug": "Add a slug to see the page here",
+    "addAddress": "Add an address to see the page here",
+    "addressTaken": "This address belongs to `{title}`. Give this page its own address to see it here.",
     "blocks": "Blocks",
     "dimensions": "Dimensions",
     "fields": "Fields",
+    "fixAddress": "Fix the address to see the page here",
     "noPreview": "The website shows here once a site is set",
     "preview": "Preview",
     "reload": "Reload",
@@ -108,7 +138,7 @@
     },
     "autoRedirect": {
       "label": "Redirect moved pages",
-      "description": "When a live page's slug changes, its old address sends visitors to the new one."
+      "description": "When a live page's address changes, its old address sends visitors to the new one."
     }
   },
   "redirects": {

@@ -38,7 +38,10 @@ import {
 import {
   computed,
   effect,
-  isArray,
+  isEmpty,
+  isNull,
+  isNullish,
+  isString,
   isUndefined,
   onCleanup,
   readStored,
@@ -46,9 +49,11 @@ import {
   writeStored,
 } from 'ohnejs/utils';
 
-import { pagePath } from './cms-meta.ts';
+import { blockID, childFields, liveValues } from './cms-live-draft.ts';
+import { pageInDraft, pagePath } from './cms-meta.ts';
 import { type PreviewBlock, previewPane } from './cms-preview-pane.ts';
 import { sharePopup } from './cms-share-popup.ts';
+import { slugHolder } from './cms-slug-holder.ts';
 
 const STORAGE_KEY = 'ohne-cms-live-view';
 const LEFT_WIDTH = 272;
@@ -335,6 +340,7 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   const { form, state, busy } = editor;
 
   const blocksFields = collection.fields.filter((field) => field.type === 'blocks');
+  const blocksNames = blocksFields.map((field) => field.name);
   const draftKey = crypto.randomUUID();
   const active = ref(blocksFields[0]?.name ?? '');
   const trees = new Map<string, BlocksTree>(
@@ -389,26 +395,37 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
   });
   panels.classList.add('o-cms-lv-panels');
 
-  const path = (): string | undefined =>
-    pagePath(
-      collection,
-      effectiveContentLocale(),
-      editor.create ? { slug: form.value?.controlOf('slug')?.read().value } : editor.saved(),
-    );
+  // A locale the record has no row in yet previews its typed slug, as a new record does.
+  const fresh = (): boolean => pageInDraft(collection, editor.create, editor.saved());
+  const typedSlug = (): string | undefined => {
+    if (!fresh()) return undefined;
+    const slug = form.value?.controlOf('slug')?.read().value;
+    return isString(slug) && !isEmpty(slug) ? slug : undefined;
+  };
+  const translatable = collection.fields.some((f) => f.name === 'slug' && f.translatable === true);
+  // The site shows the saved page at an address another record holds, never this draft over it.
+  const holder = slugHolder(
+    collection,
+    () => (translatable ? effectiveContentLocale() : undefined),
+    typedSlug,
+  );
+  const path = (): string | undefined => {
+    const saved = editor.saved();
+    if (!fresh()) return pagePath(collection, effectiveContentLocale(), saved);
+    if (!isNull(holder())) return undefined;
+    const slug = form.value?.controlOf('slug')?.read().value;
+    return pagePath(collection, effectiveContentLocale(), { ...saved, slug });
+  };
 
   const draft = computed((): Record<string, unknown> | undefined => {
     void editor.revision.value;
-    const reading = form.value?.read();
-    if (isUndefined(reading) || !isUndefined(reading.errors)) return undefined;
-    const values = (reading.value ?? {}) as Record<string, unknown>;
-    for (const field of blocksFields) {
-      stampBlocks(values[field.name], blocksHandleOf(form.value?.controlOf(field.name)));
-    }
+    const current = form.value;
+    if (isUndefined(current)) return undefined;
     return {
       collection: collection.name,
       record: editor.id() === '' ? draftKey : editor.id(),
       locale: effectiveContentLocale(),
-      values,
+      values: liveValues(current, blocksNames),
     };
   });
 
@@ -442,11 +459,20 @@ export function liveView(collection: DashboardCollection, uuid: string | undefin
 
   const pane = previewPane({
     path,
+    fresh,
     draft: () => draft.value,
-    missing: () =>
-      t(
-        isUndefined(dashboardMeta()?.cms?.site) ? 'cms.liveView.noPreview' : 'cms.liveView.addSlug',
-      ),
+    missing: () => {
+      if (isUndefined(dashboardMeta()?.cms?.site)) return t('cms.liveView.noPreview');
+      const held = holder();
+      if (!isNullish(held)) return t('cms.liveView.addressTaken', { title: held.title });
+      // The check of the typed address is on its way, so the frame follows within a round-trip.
+      if (isUndefined(held)) return '';
+      if (!isUndefined(path())) return '';
+      // A typed address the form refuses, like a reserved one, shows its own error there.
+      const typed = fresh() ? form.value?.controlOf('slug')?.draft?.() : undefined;
+      const refused = isString(typed) && !isEmpty(typed);
+      return t(refused ? 'cms.liveView.fixAddress' : 'cms.liveView.addAddress');
+    },
     editable: editor.canWrite,
     focused: () => idOf(selected()),
     highlighted: () => idOf(tree()?.highlighted()),
@@ -797,54 +823,11 @@ function deepestErrored(node: BlockNode): BlockNode {
   return node;
 }
 
-const draftIDs = new WeakMap<object, string>();
-
-/**
- * The id the website marks a block with: its `UUID`, or a draft id that holds until its first save.
- */
-function blockID(node: BlockNode): string {
-  if (!isUndefined(node.uuid)) return node.uuid;
-  let id = draftIDs.get(node.form);
-  if (isUndefined(id)) {
-    id = crypto.randomUUID();
-    draftIDs.set(node.form, id);
-  }
-  return id;
-}
-
 /**
  * The website id of `node`, or `undefined` without one.
  */
 function idOf(node: BlockNode | undefined): string | undefined {
   return isUndefined(node) ? undefined : blockID(node);
-}
-
-/**
- * Gives every block item of a draft value the id the website marks it with, at every depth.
- * The items follow the list's nodes one to one, since a draft is read only while no control errs.
- */
-function stampBlocks(value: unknown, list: BlocksHandle | undefined): void {
-  if (!isArray<Record<string, unknown>[]>(value) || isUndefined(list)) return;
-  const nodes = list.nodes();
-  value.forEach((item, index) => {
-    const node = nodes[index];
-    if (isUndefined(node)) return;
-    item.UUID = blockID(node);
-    const fields = (item.fields ?? {}) as Record<string, unknown>;
-    for (const child of childFields(node)) {
-      stampBlocks(fields[child], blocksHandleOf(node.form.controlOf(child)));
-    }
-  });
-}
-
-/**
- * The names of the `blocks` fields a block holds.
- */
-function childFields(node: BlockNode): string[] {
-  const block = dashboardMeta()?.blocks.find((entry) => entry.name === node.block);
-  return (block?.fields ?? [])
-    .filter((field) => field.type === 'blocks')
-    .map((field) => field.name);
 }
 
 /**

@@ -5,7 +5,7 @@ import { chunk, hasKey, isString, isUndefined } from 'ohnejs/utils';
 
 import { useCMSConfig } from './config.ts';
 import { isLive } from './published-scope.ts';
-import { type CMSRoute, routePath, routesIn } from './routes.ts';
+import { type CMSRoute, isHome, NOT_FOUND_SLUG, routePath, routesIn } from './routes.ts';
 
 const before = new WeakMap<Transaction, Map<string, QueryRecord>>();
 
@@ -14,6 +14,7 @@ const before = new WeakMap<Transaction, Map<string, QueryRecord>>();
  * Off when `Site.autoRedirect` is.
  * The page must be live before and after the write; a draft or an expired page has no address to keep.
  * A translatable slug moves the page in the written locale; any other moves it in every locale.
+ * The `404` page never moves, since its path is a miss either way.
  * The rows write on the page's own transaction, so they commit or roll back with it.
  */
 export function watchMoves(): void {
@@ -54,6 +55,7 @@ export function watchMoves(): void {
     for (const code of locales) {
       const route = slugRoute(collection, code);
       if (isUndefined(route)) continue;
+      if (isHome(route) && [old.slug, record.slug].includes(NOT_FOUND_SLUG)) continue;
       const from = routePath(route, old.slug);
       const to = routePath(route, record.slug);
       if (!isUndefined(from) && !isUndefined(to) && from !== to) await move(tx, from, to);
