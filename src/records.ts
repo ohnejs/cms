@@ -59,7 +59,8 @@ const PER_PAGE = 20;
  * An unknown, closed or refused collection, and `Uploads`, answer the identical `404`.
  * A list takes `where`, `order`, `select`, `page`, `perPage` and `locale`; a singleton `select` and `locale`.
  * Any other param is a `400`, and `perPage` stops at `100`.
- * Every record loads as `resolve` loads a page: relations one level deep, uploads absolute, links with `href`.
+ * Every record loads as `resolve` loads a page.
+ * Relations load one level deep, uploads with absolute URLs, and links with their `href`.
  * A routed record carries its `path` in the read's locale, and its `UUID`, whatever `select` names.
  */
 export async function readRecords(collection: string): Promise<QueryRecord | RecordPage> {

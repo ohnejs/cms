@@ -17,7 +17,8 @@ import { assertWritable, checkDraft } from './drafts.ts';
 import { hashToken } from './tokens.ts';
 
 /**
- * A shared preview link, looked up by its token's hash: one record's unsaved state, frozen when it was shared.
+ * A shared preview link, looked up by its token's hash.
+ * It holds one record's unsaved state, frozen when it was shared.
  */
 export interface Share extends Draft {
   /**
@@ -79,7 +80,8 @@ export interface ShareSummary {
 /**
  * Freezes the caller's unsaved state of a record into a link anyone may open until it expires.
  * The body is a draft with the `path` it shows and a `duration` out of `cms.share.durations`.
- * A record never saved is a `400`: its link could not be listed or revoked once it saves under its own `UUID`.
+ * A record never saved is a `400`.
+ * Its link could not be listed or revoked once it saves under its own `UUID`.
  * The token is answered here alone; only its hash is stored.
  */
 export async function createShare(

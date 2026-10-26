@@ -5,7 +5,7 @@ import { hasKey, isNull, isNumber } from 'ohnejs/utils';
 
 /**
  * The read access of a collection with pages: published records, inside their publish window.
- * A record is published when its `status` is `published`, `publishedAt` is empty or past, and `expiresAt` empty or future.
+ * Such a record's `status` is `published`, its `publishedAt` empty or past, its `expiresAt` empty or future.
  * A user with the `cms.drafts` capability reads every record, drafts included.
  *
  * @example

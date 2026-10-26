@@ -8,7 +8,8 @@ let dashboard: Middleware | null = null;
 let site: Middleware | null = null;
 
 /**
- * Allows the dashboard origin credentialed requests, as the base layer does, and the website origin plain ones.
+ * Allows the dashboard origin credentialed requests, as the base layer does.
+ * The website origin gets plain ones.
  * The website reads pages from the browser without a cookie, so it can never act as a signed-in user.
  * Shadow this file in a closer layer to change the policy, and keep both origins.
  *

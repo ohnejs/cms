@@ -59,7 +59,8 @@ interface Slot {
  * Loads every relation of `records` one level deep, at the top and inside their blocks and composites.
  * One read per target collection serves every record, so a page of records costs what one record does.
  * A relation reads as its reader may read the target, so a draft or a hidden record stays out.
- * Public uploads load whatever the reader's role, since their files are public already; private ones never do.
+ * A public upload loads for any reader, since its file is public already.
+ * A private upload never loads.
  * A loaded upload carries only what a site renders it with, and its URLs become absolute.
  * A loaded record of a collection with pages carries its `path`, so a site links to it.
  * The loaded records keep their own record relations as `UUID`s.
