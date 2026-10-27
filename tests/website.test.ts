@@ -123,6 +123,11 @@ export default defineCollection({
     strictEqual(home.record.title, 'Home');
     strictEqual(home.path, '/');
     deepStrictEqual(await resolve('/index'), { kind: 'redirect', to: '/', code: 301 });
+    deepStrictEqual(await resolve('/index?ref=x&ohne-preview=t'), {
+      kind: 'redirect',
+      to: '/?ref=x&ohne-preview=t',
+      code: 301,
+    });
   });
 
   it('carries the 404 page on a path nothing answers', async () => {

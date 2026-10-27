@@ -48,7 +48,7 @@ export type Resolved =
  *
  * The path's locale prefix picks the locale; the most specific pattern that finds a record wins.
  * `/` shows the home page, the slug `cms.homeSlug` under `/[...slug]`.
- * That slug's own path redirects to `/`.
+ * That slug's own path redirects to `/`, keeping the query.
  * A redirect whose `from` is the path answers only when no page does, so a live page shadows it.
  * A path nothing answers carries the page with the slug `404`, when there is one.
  * The `404` page's own path answers as a miss, carrying it.
@@ -77,7 +77,7 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
     const path = routePath(route, isString(record.slug) ? record.slug : slug);
     if (isUndefined(path)) continue;
     if (!home && isHome(route) && slug === homeSlug)
-      return { kind: 'redirect', to: path, code: 301 };
+      return { kind: 'redirect', to: forward(path, url), code: 301 };
     await loadRelations([record], route.collection, route.locale);
     if (isHome(route) && slug === NOT_FOUND_SLUG) return { kind: 'notFound', page: record };
     return {
