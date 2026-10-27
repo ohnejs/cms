@@ -49,11 +49,13 @@ export async function readToken(token: string): Promise<PreviewToken | undefined
 
 /**
  * The live row of `token` when it belongs to the caller's own session; anything else is refused.
+ * Without a session it answers `401`, so the dashboard asks the editor to sign in again.
  */
 export async function ownToken(token: string): Promise<PreviewToken> {
   const row = await readToken(token);
   const session = await useSession();
-  if (isUndefined(row) || isNull(session) || session.UUID !== row.session) {
+  if (isNull(session)) throw unauthorized(translate('cms.preview.signIn'));
+  if (isUndefined(row) || session.UUID !== row.session) {
     throw forbidden(translate('cms.preview.invalidToken'));
   }
   return row;

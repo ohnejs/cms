@@ -398,6 +398,11 @@ describe('preview drafts', () => {
     strictEqual((await mint('')).status, 401);
   });
 
+  it('asks to sign in again when a draft arrives without a session', async () => {
+    const { token } = await mint(await signIn('ada@example.com'));
+    strictEqual((await put('', token, { record: about, values: { title: 'Late' } })).status, 401);
+  });
+
   it('ignores the drafts of an expired token or an ended session', async () => {
     const cookie = await signIn('ada@example.com');
     const { token } = await mint(cookie);
