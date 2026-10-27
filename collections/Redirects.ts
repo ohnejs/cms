@@ -1,5 +1,7 @@
 import { defineCollection, field } from 'ohnejs';
 
+import { isRedirectTarget } from '../src/utils/is-redirect-target.ts';
+
 /**
  * Paths that send a visitor elsewhere, checked when no page answers.
  * A live page whose slug changes leaves one behind from its old path, unless `Site.autoRedirect` is off.
@@ -23,10 +25,7 @@ export default defineCollection({
       index: true,
       label: 'cms.redirects.to.label',
       description: 'cms.redirects.to.description',
-      validators: [
-        (value) =>
-          value.startsWith('/') || URL.canParse(value) ? undefined : 'cms.validation.target',
-      ],
+      validators: [(value) => (isRedirectTarget(value) ? undefined : 'cms.validation.target')],
     }),
     code: field('select', {
       choices: [

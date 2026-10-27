@@ -1,6 +1,6 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { queryUntyped } from 'ohnejs';
+import { queryUntyped, useDatabase } from 'ohnejs';
 
 import { startApp, type TestApp } from './_app.ts';
 
@@ -170,6 +170,21 @@ export default defineCollection({
     strictEqual((await resolve('/promo')).kind, 'page');
     await rename(promo, { expiresAt: Date.now() - 1 });
     deepStrictEqual(await resolve('/promo'), { kind: 'redirect', to: '/sale', code: 301 });
+  });
+
+  it('never sends a visitor to a script', async () => {
+    const outcome = await queryUntyped('Redirects').create({
+      from: '/x',
+      to: 'javascript:alert(1)',
+    });
+    ok(!outcome.ok);
+    deepStrictEqual(Object.keys(outcome.errors), ['to']);
+    await queryUntyped('Redirects').createOrThrow({ from: '/x', to: '/y' });
+    await useDatabase().run('UPDATE "Redirects" SET "to" = ? WHERE "from" = ?', [
+      'javascript:alert(1)',
+      '/x',
+    ]);
+    strictEqual((await resolve('/x')).kind, 'notFound');
   });
 
   const signIn = async (email: string) => {

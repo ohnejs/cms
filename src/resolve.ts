@@ -24,6 +24,7 @@ import {
 } from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
 import { type Alternate, alternatesOf, type SEO, seoOf } from './seo.ts';
+import { isRedirectTarget } from './utils/is-redirect-target.ts';
 
 /**
  * What a site path resolves to: a page, or nothing.
@@ -96,11 +97,12 @@ export async function resolvePath(raw: string, drafts: readonly Draft[] = []): P
 /**
  * The redirect whose `from` is the path, trailing slash aside, or `undefined`.
  * `forwardQuery` carries the request's query over to the target.
+ * A `to` that fails `isRedirectTarget` redirects nowhere, since a stored row is never checked again.
  */
 async function redirectOf(url: URL): Promise<Resolved | undefined> {
   const from = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
   const row = await queryUntyped('Redirects').where({ from }).findFirst();
-  if (isUndefined(row) || !isString(row.to)) return undefined;
+  if (isUndefined(row) || !isString(row.to) || !isRedirectTarget(row.to)) return undefined;
   const to = row.forwardQuery === true ? forward(row.to, url) : row.to;
   return { kind: 'redirect', to, code: Number(row.code) as 301 | 302 | 307 | 308 };
 }
