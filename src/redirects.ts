@@ -6,6 +6,7 @@ import { chunk, hasKey, isLocalPath, isString, isUndefined } from 'ohnejs/utils'
 import { useCMSConfig } from './config.ts';
 import { isLive } from './published-scope.ts';
 import { type CMSRoute, isHome, NOT_FOUND_SLUG, routePath, routesIn } from './routes.ts';
+import { sitePath, sitePaths } from './utils/site-path.ts';
 
 const before = new WeakMap<Transaction, Map<string, QueryRecord>>();
 
@@ -82,19 +83,31 @@ export function refuseLoops(): void {
 
 /**
  * Whether following `to` through the stored redirects arrives at `from`.
- * It stops at a target that leaves the site, and at a cycle that does not pass `from`.
+ * A URL on the website counts as its path.
+ * The walk stops at any other site, and at a cycle that does not pass `from`.
  */
 async function leadsBack(tx: Transaction, from: string, to: string): Promise<boolean> {
+  const site = useCMSConfig().site?.replace(/\/+$/, '');
   const seen = new Set<string>();
   let next: unknown = to;
-  while (isString(next) && isLocalPath(next)) {
-    const pathname = new URL(next, 'http://site').pathname;
-    const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  while (isString(next)) {
+    const rest = !isUndefined(site) && next.startsWith(site) ? next.slice(site.length) : undefined;
+    const target =
+      !isUndefined(rest) && /^(?:[/?#]|$)/.test(rest) ? `/${rest.replace(/^\//, '')}` : next;
+    if (!isLocalPath(target)) return false;
+    const { pathname } = new URL(target, 'http://site');
+    const path = sitePath(pathname);
     if (path === from) return true;
     if (seen.has(path)) return false;
     seen.add(path);
-    next = (await queryUntyped('Redirects').use(tx).unscoped().where({ from: path }).findFirst())
-      ?.to;
+    const froms = sitePaths(pathname);
+    next = (
+      await queryUntyped('Redirects')
+        .use(tx)
+        .unscoped()
+        .where({ from: { in: froms } })
+        .findFirst()
+    )?.to;
   }
   return false;
 }

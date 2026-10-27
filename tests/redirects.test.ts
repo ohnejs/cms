@@ -1,6 +1,6 @@
-import { deepStrictEqual, ok, strictEqual } from 'node:assert';
+import { deepStrictEqual, ok, rejects, strictEqual } from 'node:assert';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { queryUntyped, useDatabase } from 'ohnejs';
+import { queryUntyped, useDatabase, useEnv } from 'ohnejs';
 
 import { startApp, type TestApp } from './_app.ts';
 
@@ -188,10 +188,38 @@ export default defineCollection({
     deepStrictEqual(await resolve('/d'), { kind: 'redirect', to: '/a', code: 301 });
   });
 
-  it('stores a `from` as a request reaches it, and refuses one with a query or a hash', async () => {
+  it("follows a redirect to the website's own URL when it looks for a loop", async () => {
+    useEnv().set('SITE_URL', 'https://site.test');
+    try {
+      await queryUntyped('Redirects').createOrThrow({ from: '/x', to: '/y' });
+      const loop = queryUntyped('Redirects').createOrThrow({
+        from: '/y',
+        to: 'https://site.test/x',
+      });
+      await rejects(loop, (error: { status?: number }) => error.status === 422);
+      await queryUntyped('Redirects').createOrThrow({ from: '/z', to: 'https://elsewhere.test/x' });
+      await queryUntyped('Redirects').createOrThrow({
+        from: '/start',
+        to: 'https://site.test?x=1',
+      });
+      const home = queryUntyped('Redirects').createOrThrow({ from: '/', to: '/start' });
+      await rejects(home, (error: { status?: number }) => error.status === 422);
+    } finally {
+      useEnv().unset('SITE_URL');
+    }
+  });
+
+  it('stores a `from` readable, matches it however it is encoded, and refuses a query or a hash', async () => {
     const row = await queryUntyped('Redirects').createOrThrow({ from: '/über/', to: '/team' });
-    strictEqual(row.from, '/%C3%BCber');
+    strictEqual(row.from, '/über');
     deepStrictEqual(await resolve('/über'), { kind: 'redirect', to: '/team', code: 301 });
+    deepStrictEqual(await resolve('/%C3%BCber'), { kind: 'redirect', to: '/team', code: 301 });
+    await queryUntyped('Redirects').createOrThrow({ from: '/older', to: '/team' });
+    await useDatabase().run('UPDATE "Redirects" SET "from" = ? WHERE "from" = ?', [
+      '/%C3%A4lter',
+      '/older',
+    ]);
+    deepStrictEqual(await resolve('/älter'), { kind: 'redirect', to: '/team', code: 301 });
     for (const from of ['/old?id=1', '/old#top']) {
       const outcome = await queryUntyped('Redirects').create({ from, to: '/team' });
       ok(!outcome.ok);
