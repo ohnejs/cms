@@ -1,3 +1,4 @@
-import { watchMoves } from '../src/redirects.ts';
+import { refuseLoops, watchMoves } from '../src/redirects.ts';
 
 watchMoves();
+refuseLoops();

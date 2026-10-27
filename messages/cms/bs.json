@@ -68,7 +68,9 @@
   "validation": {
     "slugNested": "Ova adresa ne može sadržavati kosu crtu",
     "path": "Počnite putanju kosom crtom",
-    "target": "Koristite putanju koja počinje kosom crtom ili punu URL adresu"
+    "target": "Koristite putanju koja počinje kosom crtom ili punu URL adresu",
+    "plainPath": "Koristite običnu putanju, bez `?` ili `#`",
+    "redirectLoop": "Ovo preusmjeravanje bi vodilo nazad na sebe"
   },
   "liveView": {
     "addAddress": "Dodajte adresu da biste ovdje vidjeli stranicu",

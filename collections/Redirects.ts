@@ -1,6 +1,8 @@
 import { defineCollection, field } from 'ohnejs';
+import { isLocalPath } from 'ohnejs/utils';
 
 import { isRedirectTarget } from '../src/utils/is-redirect-target.ts';
+import { sitePath } from '../src/utils/site-path.ts';
 
 /**
  * Paths that send a visitor elsewhere, checked when no page answers.
@@ -18,8 +20,13 @@ export default defineCollection({
       unique: true,
       label: 'cms.redirects.from.label',
       description: 'cms.redirects.from.description',
-      sanitizers: [(value) => (value.length > 1 ? value.replace(/\/+$/, '') : value)],
-      validators: [(value) => (value.startsWith('/') ? undefined : 'cms.validation.path')],
+      sanitizers: [sitePath],
+      validators: [
+        (value) => {
+          if (!value.startsWith('/')) return 'cms.validation.path';
+          return isLocalPath(value) && !/[?#]/.test(value) ? undefined : 'cms.validation.plainPath';
+        },
+      ],
     }),
     to: field('text', {
       index: true,

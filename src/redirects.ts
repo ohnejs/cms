@@ -1,7 +1,7 @@
 import type { QueryRecord, Transaction } from 'ohnejs';
 
-import { hook, queryMetadata, queryUntyped, useConfig } from 'ohnejs';
-import { chunk, hasKey, isString, isUndefined } from 'ohnejs/utils';
+import { hook, queryMetadata, queryUntyped, translate, unprocessable, useConfig } from 'ohnejs';
+import { chunk, hasKey, isLocalPath, isString, isUndefined } from 'ohnejs/utils';
 
 import { useCMSConfig } from './config.ts';
 import { isLive } from './published-scope.ts';
@@ -61,6 +61,42 @@ export function watchMoves(): void {
       if (!isUndefined(from) && !isUndefined(to) && from !== to) await move(tx, from, to);
     }
   });
+}
+
+/**
+ * Refuses a redirect whose `to` leads back to its own `from`, directly or through other redirects.
+ * A loop would send a visitor around until the browser gives up.
+ */
+export function refuseLoops(): void {
+  const check = async (
+    record: QueryRecord,
+    { collection, tx }: { collection: string; tx: Transaction },
+  ): Promise<void> => {
+    if (collection !== 'Redirects' || !isString(record.from) || !isString(record.to)) return;
+    if (!(await leadsBack(tx, record.from, record.to))) return;
+    throw unprocessable(undefined, { errors: { to: translate('cms.validation.redirectLoop') } });
+  };
+  hook('record:after-create', check);
+  hook('record:after-update', check);
+}
+
+/**
+ * Whether following `to` through the stored redirects arrives at `from`.
+ * It stops at a target that leaves the site, and at a cycle that does not pass `from`.
+ */
+async function leadsBack(tx: Transaction, from: string, to: string): Promise<boolean> {
+  const seen = new Set<string>();
+  let next: unknown = to;
+  while (isString(next) && isLocalPath(next)) {
+    const pathname = new URL(next, 'http://site').pathname;
+    const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+    if (path === from) return true;
+    if (seen.has(path)) return false;
+    seen.add(path);
+    next = (await queryUntyped('Redirects').use(tx).unscoped().where({ from: path }).findFirst())
+      ?.to;
+  }
+  return false;
 }
 
 /**

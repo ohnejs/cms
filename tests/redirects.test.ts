@@ -172,6 +172,33 @@ export default defineCollection({
     deepStrictEqual(await resolve('/promo'), { kind: 'redirect', to: '/sale', code: 301 });
   });
 
+  it('refuses a redirect that leads back to itself, directly or through others', async () => {
+    const refused = async (from: string, to: string): Promise<boolean> =>
+      queryUntyped('Redirects')
+        .createOrThrow({ from, to })
+        .then(
+          () => false,
+          (error: { status?: number }) => error.status === 422,
+        );
+    strictEqual(await refused('/self', '/self/'), true);
+    await queryUntyped('Redirects').createOrThrow({ from: '/a', to: '/b' });
+    await queryUntyped('Redirects').createOrThrow({ from: '/b', to: '/c' });
+    strictEqual(await refused('/c', '/a?ref=x'), true);
+    strictEqual(await refused('/d', '/a'), false);
+    deepStrictEqual(await resolve('/d'), { kind: 'redirect', to: '/a', code: 301 });
+  });
+
+  it('stores a `from` as a request reaches it, and refuses one with a query or a hash', async () => {
+    const row = await queryUntyped('Redirects').createOrThrow({ from: '/über/', to: '/team' });
+    strictEqual(row.from, '/%C3%BCber');
+    deepStrictEqual(await resolve('/über'), { kind: 'redirect', to: '/team', code: 301 });
+    for (const from of ['/old?id=1', '/old#top']) {
+      const outcome = await queryUntyped('Redirects').create({ from, to: '/team' });
+      ok(!outcome.ok);
+      deepStrictEqual(Object.keys(outcome.errors), ['from']);
+    }
+  });
+
   it('never sends a visitor to a script', async () => {
     const outcome = await queryUntyped('Redirects').create({
       from: '/x',

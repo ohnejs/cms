@@ -68,7 +68,9 @@
   "validation": {
     "slugNested": "This address cannot contain a slash",
     "path": "Start the path with a slash",
-    "target": "Use a path starting with a slash, or a full URL"
+    "target": "Use a path starting with a slash, or a full URL",
+    "plainPath": "Use a plain path, without `?` or `#`",
+    "redirectLoop": "This redirect would lead back to itself"
   },
   "liveView": {
     "addAddress": "Add an address to see the page here",

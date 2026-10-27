@@ -68,7 +68,9 @@
   "validation": {
     "slugNested": "Diese Adresse darf keinen Schrägstrich enthalten",
     "path": "Beginne den Pfad mit einem Schrägstrich",
-    "target": "Nutze einen Pfad, der mit einem Schrägstrich beginnt, oder eine vollständige URL"
+    "target": "Nutze einen Pfad, der mit einem Schrägstrich beginnt, oder eine vollständige URL",
+    "plainPath": "Nutze einen einfachen Pfad, ohne `?` oder `#`",
+    "redirectLoop": "Diese Weiterleitung würde zu sich selbst zurückführen"
   },
   "liveView": {
     "addAddress": "Füge eine Adresse hinzu, um die Seite hier zu sehen",
