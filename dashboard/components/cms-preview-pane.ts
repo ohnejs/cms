@@ -1,6 +1,16 @@
 import type { BlockAction, Child } from 'ohnejs/dashboard';
 
-import { api, attachTooltip, button, css, h, renderProse, useT, when } from 'ohnejs/dashboard';
+import {
+  api,
+  attachTooltip,
+  button,
+  css,
+  h,
+  renderProse,
+  signInCount,
+  useT,
+  when,
+} from 'ohnejs/dashboard';
 import { effect, isString, isUndefined, onCleanup, ref, untracked } from 'ohnejs/utils';
 
 import { frameURL } from './cms-meta.ts';
@@ -217,8 +227,16 @@ export function previewPane(options: PreviewPaneOptions): PreviewPane {
   let missed: unknown;
   const kept = ref(false);
 
-  void api('POST /cms/preview/tokens').then(async (response) => {
-    if (response.ok) token.value = ((await response.json()) as { token: string }).token;
+  let mints = 0;
+  effect(() => {
+    // A token belongs to the session it was minted in, so a sign-in in place needs a new one.
+    void signInCount();
+    const mint = ++mints;
+    void untracked(() => api('POST /cms/preview/tokens')).then(async (response) => {
+      if (!response.ok) return;
+      const { token: minted } = (await response.json()) as { token: string };
+      if (mint === mints) token.value = minted;
+    });
   });
 
   const url = (): string | undefined => {

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { effectScope, isUndefined, ref } from 'ohnejs/utils';
 
 // The dashboard runtime needs a browser, so its import here answers from the fakes a test sets.
-const fake = `data:text/javascript,export const { api, attachTooltip, button, css, dashboardMeta, h, renderProse, useT, when } = globalThis.dashboard;`;
+const fake = `data:text/javascript,export const { api, attachTooltip, button, css, dashboardMeta, h, renderProse, signInCount, useT, when } = globalThis.dashboard;`;
 registerHooks({
   resolve: (specifier, context, next) =>
     specifier === 'ohnejs/dashboard' ? { url: fake, shortCircuit: true } : next(specifier, context),
@@ -20,6 +20,8 @@ const frames: Frame[] = [];
 const events: string[] = [];
 const listeners: ((event: object) => void)[] = [];
 const proses: [string, object][] = [];
+const puts: string[] = [];
+const signIns = ref(0);
 
 Object.assign(globalThis, {
   window: {
@@ -35,6 +37,7 @@ Object.assign(globalThis, {
     css: () => {},
     useT: () => (key: string) => key,
     when: (shown: () => boolean) => shown,
+    signInCount: () => signIns.value,
     button: () => ({}),
     attachTooltip: () => () => {},
     renderProse: (_: object, text: string, options: object) => proses.push([text, options]),
@@ -57,8 +60,10 @@ Object.assign(globalThis, {
       return frame;
     },
     api: async (route: string, init?: { body: string }) => {
+      // Each sign-in's token names it, so the first is `t` and the one after a sign-in `t1`.
       if (route === 'POST /cms/preview/tokens')
-        return { ok: true, json: async () => ({ token: 't' }) };
+        return { ok: true, json: async () => ({ token: `t${signIns.value || ''}` }) };
+      puts.push(route);
       const { path, values } = JSON.parse(init!.body) as {
         path: string;
         values: { title: string };
@@ -81,6 +86,8 @@ beforeEach(() => {
   mock.timers.enable({ apis: ['setTimeout'] });
   scope = effectScope();
   events.length = 0;
+  puts.length = 0;
+  signIns.value = 0;
 });
 
 afterEach(() => {
@@ -179,6 +186,17 @@ function titles(frame: Frame): (string | undefined)[] {
 }
 
 describe('previewPane', () => {
+  it('mints a new token when the editor signs in again, and frames and drafts under it', async () => {
+    const { draft, frame } = await mount('/a', page('a'));
+    await wait(300);
+    signIns.value++;
+    await wait(0);
+    draft.value = page('a', 'Renamed');
+    await wait(300);
+    deepStrictEqual(frame.loads, ['http://site.test/a?preview=t', 'http://site.test/a?preview=t1']);
+    deepStrictEqual(puts.at(-1), 'PUT /cms/preview/tokens/t1');
+  });
+
   it('shows why there is no page as prose, without links', async () => {
     const reason = ref('This address belongs to `Contact`.');
     await mount('/new', undefined, { missing: () => reason.value });
