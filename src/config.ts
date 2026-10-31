@@ -78,6 +78,14 @@ declare module 'ohnejs' {
       homeSlug?: string;
 
       /**
+       * Forces `noindex` on every page, empties the sitemap and keeps robots.txt open.
+       *
+       * @default
+       * false
+       */
+      noindex?: boolean;
+
+      /**
        * The URLs told about every change to a page, the site settings, or a redirect.
        * A website refreshes its pages when told.
        * Each request is signed with the hook's `secret`; check it with `verifyWebhook` from `@ohnejs/client`.
@@ -171,6 +179,11 @@ export interface ResolvedCMSConfig {
   homeSlug: string;
 
   /**
+   * Whether every page is `noindex`, whatever the site settings say.
+   */
+  noindex: boolean;
+
+  /**
    * The URLs told about every change, each with the secret that signs its requests.
    */
   webhooks: { url: string; secret: string }[];
@@ -194,6 +207,7 @@ export const CMS_DEFAULTS = {
   prefixDefaultLocale: false,
   previewURL: '{path}?ohne-preview={token}',
   homeSlug: 'index',
+  noindex: false,
   webhooks: [],
   share: { durations: ['1h', '1d', '7d', '30d'], default: '1d' },
 } satisfies Omit<ResolvedCMSConfig, 'site' | 'types'>;

@@ -226,12 +226,12 @@ export default defineCollection({
     strictEqual(xml.includes('example.com/404<'), false);
   });
 
-  it('opens robots.txt to everyone and names the sitemap, or closes it under noindex', async () => {
+  it('opens robots.txt to everyone and names the sitemap, or drops the sitemap under noindex', async () => {
     const open = await (await fetch(`http://127.0.0.1:${app.port}/cms/robots.txt`)).text();
     strictEqual(open, 'User-agent: *\nAllow: /\n\nSitemap: https://example.com/sitemap.xml\n');
     await queryUntyped('Site').updateOrThrow({ noindex: true });
-    const closed = await (await fetch(`http://127.0.0.1:${app.port}/cms/robots.txt`)).text();
-    strictEqual(closed, 'User-agent: *\nDisallow: /\n');
+    const hidden = await (await fetch(`http://127.0.0.1:${app.port}/cms/robots.txt`)).text();
+    strictEqual(hidden, 'User-agent: *\nDisallow:\n');
     await queryUntyped('Site').updateOrThrow({ noindex: false });
   });
 

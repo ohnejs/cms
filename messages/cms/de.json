@@ -137,7 +137,7 @@
     },
     "noindex": {
       "label": "Website vor Suchmaschinen verbergen",
-      "description": "Jede Seite bittet Suchmaschinen, fernzubleiben, und robots.txt sperrt die Website."
+      "description": "Jede Seite bittet Suchmaschinen, fernzubleiben, und die Sitemap bleibt leer."
     },
     "autoRedirect": {
       "label": "Verschobene Seiten weiterleiten",

@@ -1,6 +1,7 @@
 import { queryUntyped, useConfig } from 'ohnejs';
 import { escapeXML, isPlainObject, isString, isUndefined } from 'ohnejs/utils';
 
+import { useCMSConfig } from './config.ts';
 import { isHome, NOT_FOUND_SLUG, routePath, routesIn } from './routes.ts';
 import { scopedRead } from './scoped-read.ts';
 import { absolute } from './seo.ts';
@@ -17,11 +18,10 @@ interface Entry {
  * The sitemap of every page the public may see, one `<url>` per page and locale.
  * A page in several locales lists the others as `hreflang` alternates.
  * Pages marked `noindex`, and the `404` page under `/[...slug]`, stay out.
- * A site marked `noindex` lists nothing.
+ * A site under `noindex` lists nothing.
  */
 export async function sitemap(): Promise<string> {
-  const site = await queryUntyped('Site').findFirst();
-  const entries = site?.noindex === true ? new Map<string, Entry>() : await collect();
+  const entries = (await hidden()) ? new Map<string, Entry>() : await collect();
   const urls = [...entries.values()].flatMap((entry) =>
     [...entry.paths.values()].map((path) => {
       const alternates =
@@ -77,10 +77,17 @@ async function readAll(collection: string, locale: string) {
 
 /**
  * The `robots.txt` of the website.
- * It opens everything and names the sitemap, or closes everything under `noindex`.
+ * It opens everything and names the sitemap, or answers an open file with no sitemap under `noindex`.
+ * Crawlers must read a page to see its `noindex` meta.
  */
 export async function robots(): Promise<string> {
-  const site = await queryUntyped('Site').findFirst();
-  if (site?.noindex === true) return 'User-agent: *\nDisallow: /\n';
+  if (await hidden()) return 'User-agent: *\nDisallow:\n';
   return `User-agent: *\nAllow: /\n\nSitemap: ${absolute('/sitemap.xml')}\n`;
+}
+
+/**
+ * Whether the site is under `noindex`, from `cms.noindex` or the site settings.
+ */
+async function hidden(): Promise<boolean> {
+  return useCMSConfig().noindex || (await queryUntyped('Site').findFirst())?.noindex === true;
 }

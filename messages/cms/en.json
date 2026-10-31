@@ -137,7 +137,7 @@
     },
     "noindex": {
       "label": "Hide the site from search engines",
-      "description": "Every page asks search engines to stay away, and robots.txt closes the site."
+      "description": "Every page asks search engines to stay away, and the sitemap lists nothing."
     },
     "autoRedirect": {
       "label": "Redirect moved pages",

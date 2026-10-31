@@ -46,7 +46,8 @@ export async function seoOf(record: QueryRecord, locale: string, path: string): 
   if (!isUndefined(description)) seo.description = description;
   const image = urlOf(own.image) ?? urlOf(site.image);
   if (!isUndefined(image)) seo.image = image;
-  if (own.noindex === true || site.noindex === true) seo.robots = 'noindex';
+  if (own.noindex === true || site.noindex === true || useCMSConfig().noindex)
+    seo.robots = 'noindex';
   return seo;
 }
 

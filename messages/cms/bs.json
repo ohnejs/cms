@@ -137,7 +137,7 @@
     },
     "noindex": {
       "label": "Sakrij sajt od pretraživača",
-      "description": "Svaka stranica traži od pretraživača da je zaobiđu, a robots.txt zatvara sajt."
+      "description": "Svaka stranica traži od pretraživača da je zaobiđu, a sitemap ostaje prazan."
     },
     "autoRedirect": {
       "label": "Preusmjeri premještene stranice",
