@@ -1,7 +1,7 @@
 import type {} from 'ohnejs/uploads';
 
 import { field, useConfig } from 'ohnejs';
-import { canonicalizeLanguage, fitsRoute, isUndefined } from 'ohnejs/utils';
+import { fitsRoute, isUndefined } from 'ohnejs/utils';
 
 import { routeEntries, useCMSConfig } from './config.ts';
 
@@ -92,7 +92,6 @@ export function pageFields(options: PageFieldsOptions = {}) {
 
 /**
  * Whether `slug` fits every route of `collection` it renders through: `locale`'s alone when given, else all.
- * The write carries `locale` canonical, so each configured tag is compared in its canonical form.
  * Without such a route it has no address to fit, so it only keeps out of `/`.
  */
 function fits(slug: string, collection: string, locale: string | undefined): boolean {
@@ -100,7 +99,7 @@ function fits(slug: string, collection: string, locale: string | undefined): boo
   const patterns = isUndefined(value)
     ? []
     : routeEntries(value, useConfig().collections.locales)
-        .filter(([code]) => isUndefined(locale) || canonicalizeLanguage(code) === locale)
+        .filter(([code]) => isUndefined(locale) || code === locale)
         .map(([, pattern]) => pattern);
   if (patterns.length === 0) return !slug.includes('/');
   return patterns.every((pattern) => fitsRoute(pattern, { slug }));

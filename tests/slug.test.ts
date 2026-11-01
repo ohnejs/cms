@@ -132,7 +132,10 @@ export default defineConfig({
 `,
       'collections/Posts.ts': `import { defineCollection, field } from 'ohnejs';
 import { pageFields } from '@ohnejs/cms';
-export default defineCollection({ fields: { title: field('text'), ...pageFields({ translatable: true }) } });
+export default defineCollection({
+  fields: { title: field('text'), ...pageFields({ translatable: true }) },
+  api: { read: 'public' },
+});
 `,
     });
   });
@@ -143,5 +146,19 @@ export default defineCollection({ fields: { title: field('text'), ...pageFields(
     const nested = await queryUntyped('Posts').locale('de-at').create({ title: 'x', slug: 'a/b' });
     strictEqual(nested.ok, true);
     strictEqual((await queryUntyped('Posts').create({ title: 'y', slug: 'c/d' })).ok, false);
+  });
+
+  it('reads and routes the locale by its canonical tag, however the request spells it', async () => {
+    const post = await queryUntyped('Posts').createOrThrow({ title: 'Hello', slug: 'hello' });
+    await queryUntyped('Posts')
+      .locale('de-AT')
+      .where({ UUID: post.UUID })
+      .updateOrThrow({ title: 'Servus', slug: 'servus' });
+    strictEqual((await app.get('/cms/records/Posts?locale=de-at')).status, 200);
+    const page = await app.get(`/cms/routes/resolve?path=${encodeURIComponent('/blog/hello')}`);
+    deepStrictEqual(
+      page.body.alternates.map((alternate: { hreflang: string }) => alternate.hreflang),
+      ['en', 'x-default', 'de-AT'],
+    );
   });
 });

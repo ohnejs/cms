@@ -3,6 +3,7 @@ import type { LayerStrategies } from 'ohnejs/utils';
 
 import { ohneError, useCollections, useConfig, useEnv } from 'ohnejs';
 import {
+  canonicalizeLanguage,
   canonicalSlug,
   compileRoute,
   isNull,
@@ -300,6 +301,7 @@ export function validateCMSConfig(): void {
         ],
       });
     }
+    const routed = new Set<string>();
     for (const [locale, pattern] of routeEntries(value, locales)) {
       if (!(locales as readonly string[]).includes(locale)) {
         throw ohneError({
@@ -307,6 +309,13 @@ export function validateCMSConfig(): void {
           body: [`The locales are ${locales.map((code) => `\`${code}\``).join(', ')}.`],
         });
       }
+      if (routed.has(locale)) {
+        throw ohneError({
+          title: `Duplicate locale \`${locale}\` in \`cms.routes.${collection}\``,
+          body: ['Two keys spell the same locale, whatever the casing.', 'Drop one.'],
+        });
+      }
+      routed.add(locale);
       validatePattern(
         collection,
         pattern,
@@ -412,8 +421,8 @@ export function routeEntries(
   locales: readonly string[],
 ): [string, string][] {
   if (isString(value)) return locales.map((locale) => [locale, value]);
-  return Object.entries(isPlainObject(value) ? value : {}).filter(
-    (entry): entry is [string, string] => isString(entry[1]),
+  return Object.entries(isPlainObject(value) ? value : {}).flatMap(([code, pattern]) =>
+    isString(pattern) ? [[canonicalizeLanguage(code) ?? code, pattern]] : [],
   );
 }
 

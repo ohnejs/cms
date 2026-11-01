@@ -94,6 +94,19 @@ describe('cms config', () => {
     );
   });
 
+  it('refuses two keys spelling one locale', async () => {
+    await refuses(
+      {
+        'ohne.config.ts': config(
+          "{ routes: { Pages: { en: '/[slug]', 'de-at': '/a/[slug]', 'de-AT': '/b/[slug]' } } }",
+          "['en', 'de-AT']",
+        ),
+        'collections/Pages.ts': PAGES,
+      },
+      /Duplicate locale `de-AT` in `cms.routes.Pages`/,
+    );
+  });
+
   it('refuses a site that is not a URL', async () => {
     await refuses(
       { 'ohne.config.ts': config("{ site: 'example.com' }") },
