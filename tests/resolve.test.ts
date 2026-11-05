@@ -9,7 +9,7 @@ const APP = {
 export default defineConfig({
   layers: ['@ohnejs/cms'],
   collections: { locales: ['en', 'de'], defaultLocale: 'en' },
-  uploads: { images: { url: 'https://images.example.com' } },
+  uploads: { images: { url: 'https://images.example.com', srcset: ['thumbnail'] } },
   cms: {
     routes: {
       Pages: '/[...slug]',
@@ -245,6 +245,7 @@ describe('resolve', () => {
       'height',
       'name',
       'size',
+      'srcset',
       'type',
       'url',
       'variants',
@@ -252,6 +253,7 @@ describe('resolve', () => {
     ]);
     deepStrictEqual(Object.keys(loaded.variants), ['thumbnail']);
     match(loaded.variants.thumbnail, /^https:\/\/images\.example\.com\//);
+    strictEqual(loaded.srcset, `${loaded.variants.thumbnail} 320w`);
   });
 
   it("loads an upload's description in the page's locale", async () => {

@@ -53,6 +53,7 @@ export default defineConfig({
     images: {
       url: 'https://images.example.com',
       variants: { card: { width: 640 }, thumbnail: { width: 160 } },
+      srcset: ['card'],
     },
   },
   cms: { routes: { Pages: '/[...slug]', Posts: { en: '/blog/[slug]', de: '/artikel/[slug]' } } },
@@ -149,6 +150,10 @@ const ohne = createOhne<CMS>({ api: 'https://cms.example.com' });
 
 export function image(upload: Upload | null): string {
   return upload ? (upload.variants?.card ?? upload.url) : '';
+}
+
+export function srcset(upload: Upload): string {
+  return upload.srcset ?? '';
 }
 
 export function renderBlock(item: Block): string {
@@ -456,7 +461,8 @@ describe('site types without rich text', () => {
     match(text, /^export interface Blocks \{\}$/m);
     match(text, /^export interface Creatable \{\}$/m);
     match(text, /^ {2}creatable: Creatable;$/m);
-    ok(!text.includes('ImageVariant'));
+    match(text, /^export type ImageVariant = 'thumbnail';$/m);
+    ok(!text.includes('srcset'));
   });
 });
 

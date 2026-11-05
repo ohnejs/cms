@@ -210,10 +210,10 @@ async function readTargets(
 
 /**
  * The public files among `ids` in `locale`, with absolute URLs and only `UPLOAD_FIELDS`.
- * The read selects what `decorateUpload` needs to build `url` and `variants` too.
+ * The read selects what `decorateUpload` needs to build `url`, `variants` and `srcset` too.
  */
 async function readPublicUploads(ids: string[], locale: string): Promise<QueryRecord[]> {
-  const shown = [...UPLOAD_FIELDS, 'url', 'variants'];
+  const shown = [...UPLOAD_FIELDS, 'url', 'variants', 'srcset'];
   const uploads: QueryRecord[] = [];
   for (const batch of chunk(ids, 900)) {
     const found = await queryUntyped('Uploads')
@@ -250,10 +250,12 @@ async function readScoped(
  */
 function absolutize(upload: QueryRecord): QueryRecord {
   const origin = apiOrigin();
-  if (isString(upload.url) && upload.url.startsWith('/')) upload.url = origin + upload.url;
+  const absolute = (url: string): string => (url.startsWith('/') ? origin + url : url);
+  if (isString(upload.url)) upload.url = absolute(upload.url);
+  if (isString(upload.srcset)) upload.srcset = upload.srcset.split(', ').map(absolute).join(', ');
   if (!isPlainObject(upload.variants)) return upload;
   for (const [name, url] of Object.entries(upload.variants)) {
-    if (isString(url) && url.startsWith('/')) upload.variants[name] = origin + url;
+    if (isString(url)) upload.variants[name] = absolute(url);
   }
   return upload;
 }

@@ -10,6 +10,7 @@ export default defineConfig({
   layers: ['@ohnejs/cms'],
   auth: { loginRateLimit: false },
   collections: { locales: ['en', 'de'], defaultLocale: 'en' },
+  uploads: { images: { srcset: ['thumbnail'] } },
   cms: {
     routes: {
       Pages: '/[...slug]',
@@ -319,6 +320,8 @@ describe('records', () => {
     const { body } = await get(`/cms/records/Posts/${posts[0]}`);
     strictEqual(body.image.UUID, photo);
     match(body.image.url, new RegExp(`^${base}/uploads/photo\\.png$`));
+    deepStrictEqual(body.image.variants, { thumbnail: body.image.url });
+    strictEqual(body.image.srcset, `${body.image.url} 320w`);
     deepStrictEqual(body.author, { UUID: ada, name: 'Ada' });
   });
 
