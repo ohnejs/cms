@@ -9,6 +9,7 @@ import { sitePath } from '../src/utils/site-path.ts';
  * A live page whose slug changes leaves one behind from its old path, unless `Site.autoRedirect` is off.
  */
 export default defineCollection({
+  label: 'cms.redirects.label',
   api: { read: true, create: true, update: true, delete: true },
   dashboard: {
     icon: 'arrow-forward-up',

@@ -122,6 +122,7 @@
     "unsaved": "Save the record before you share it"
   },
   "site": {
+    "label": "Site",
     "name": {
       "label": "Site name"
     },
@@ -145,6 +146,7 @@
     }
   },
   "redirects": {
+    "label": "Redirects",
     "from": {
       "label": "From",
       "description": "The path a visitor asks for, like /old-page. A live page at this path answers instead."

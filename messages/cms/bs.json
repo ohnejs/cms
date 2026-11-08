@@ -122,6 +122,7 @@
     "unsaved": "Sačuvajte zapis prije nego što ga podijelite"
   },
   "site": {
+    "label": "Web stranica",
     "name": {
       "label": "Naziv sajta"
     },
@@ -145,6 +146,7 @@
     }
   },
   "redirects": {
+    "label": "Preusmjeravanja",
     "from": {
       "label": "Od",
       "description": "Putanja koju posjetilac traži, npr. /stara-stranica. Aktivna stranica na ovoj putanji odgovara umjesto toga."

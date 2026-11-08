@@ -7,6 +7,7 @@ import { defineCollection, field } from 'ohnejs';
  * `autoRedirect` keeps a live page's old address working when its slug changes.
  */
 export default defineCollection({
+  label: 'cms.site.label',
   singleton: true,
   api: { read: 'public', update: true },
   dashboard: { icon: 'world' },

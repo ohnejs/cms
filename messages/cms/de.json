@@ -122,6 +122,7 @@
     "unsaved": "Speichere den Datensatz, bevor du ihn teilst"
   },
   "site": {
+    "label": "Website",
     "name": {
       "label": "Name der Website"
     },
@@ -145,6 +146,7 @@
     }
   },
   "redirects": {
+    "label": "Weiterleitungen",
     "from": {
       "label": "Von",
       "description": "Der Pfad, den ein Besucher aufruft, etwa /alte-seite. Eine live geschaltete Seite unter diesem Pfad antwortet stattdessen."
