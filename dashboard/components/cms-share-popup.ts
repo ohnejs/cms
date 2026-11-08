@@ -22,6 +22,7 @@ import {
 import {
   formatDuration,
   formatLocaleCode,
+  isEmpty,
   isUndefined,
   onCleanup,
   parseDuration,
@@ -238,11 +239,13 @@ export function sharePopup(options: SharePopupOptions): Popup {
             ? h('span', { class: 'ohne-shrink-0 ohne-muted' }, formatLocaleCode(entry.locale))
             : null,
           h('span', { class: 'ohne-truncate' }, entry.path),
-          h(
-            'span',
-            { class: 'o-cms-share-row-hint ohne-shrink-0 ohne-muted' },
-            `…${entry.tokenHint}`,
-          ),
+          isEmpty(entry.tokenHint)
+            ? null
+            : h(
+                'span',
+                { class: 'o-cms-share-row-hint ohne-shrink-0 ohne-muted' },
+                `…${entry.tokenHint}`,
+              ),
         ),
         h(
           'div',
