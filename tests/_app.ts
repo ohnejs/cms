@@ -54,12 +54,15 @@ export function writeApp(files: Record<string, string>): string {
 }
 
 /**
- * Writes an app from `files` as `writeApp` does, and serves its API.
+ * Writes an app from `files` as `writeApp` does, and serves its API from `database`.
  */
-export async function startApp(files: Record<string, string>): Promise<TestApp> {
+export async function startApp(
+  files: Record<string, string>,
+  database = ':memory:',
+): Promise<TestApp> {
   const dir = writeApp(files);
   useEnv().set('SILENT', true);
-  useEnv().set('DATABASE', ':memory:');
+  useEnv().set('DATABASE', database);
   useEnv().set('PORT', 0);
   useEnv().set('NO_COLOR', true);
 
